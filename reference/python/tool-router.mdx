@@ -58,12 +58,12 @@ Creates a new `ToolRouterSession` for the given user.
   - `{"wait_for_connections": True}` — block session until connections are ready
 </ParamField>
 
-<ParamField path="auth_configs" type="List[str]">
-  Pre-select specific auth config IDs to use for this session, instead of the default project-level configs.
+<ParamField path="auth_configs" type="Dict[str, str]">
+  Map of toolkit slug to auth config ID. Pre-selects specific auth configs for each toolkit in this session, instead of the default project-level configs. Example: `{"github": "ac_xxx", "slack": "ac_yyy"}`.
 </ParamField>
 
-<ParamField path="connected_accounts" type="List[str]">
-  Pin specific connected account IDs to use in this session.
+<ParamField path="connected_accounts" type="Dict[str, str | List[str]]">
+  Map of toolkit slug to connected account ID or list of IDs. Pins specific connected accounts for each toolkit in this session. Only one account per toolkit is allowed when multi-account mode is disabled. Example: `{"github": "ca_xxx", "slack": ["ca_yyy"]}`.
 </ParamField>
 
 <ParamField path="workbench" type="ToolRouterWorkbenchConfig">
@@ -240,10 +240,10 @@ List toolkit connection states for this session, including whether each toolkit 
 ```python
 details = session.toolkits(is_connected=True)
 for state in details.items:
-    print(state.toolkit_slug, state.is_active)
+    print(state.slug, state.connection.is_active if state.connection else False)
 ```
 
-### `session.patch()`
+### `session.update()`
 
 Update session settings (toolkits, tools, tags, etc.) without creating a new session.
 

@@ -1,6 +1,6 @@
 ---
-title: 'Configuring Composio Sessions'
-description: 'Control which toolkits, tools, and tags are available in a session. Configure managed connections, workbench, preloading, and experimental options.'
+title: 'Configuring Composio Sessions: Toolkits, Tools & Presets'
+description: 'Control which toolkits, tools, and tags are available in a session. Configure managed connections, workbench, preloading, and presets.'
 ---
 
 When you call `composio.create()` / `composio.tool_router.create()`, the second argument is a **session config** object that determines exactly which tools are available in the session, how connections are managed, and whether a persistent code sandbox is provisioned. Every field is optional — omit what you don't need.
@@ -303,7 +303,7 @@ const session = await composio.create('user_123', {
 ```
 
 ```python Python
-from composio.core.models.tool_router_constants import SESSION_PRESET_DIRECT_TOOLS
+from composio import SESSION_PRESET_DIRECT_TOOLS
 
 session = composio.tool_router.create(
     user_id="user_123",

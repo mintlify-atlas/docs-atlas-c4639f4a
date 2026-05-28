@@ -46,12 +46,20 @@ Instantiate the SDK. The `COMPOSIO_API_KEY` environment variable is read automat
   API environment to connect to. Accepted values: `"production"`, `"staging"`, `"local"`.
 </ParamField>
 
-<ParamField path="timeout" type="int" default="30">
-  Per-request timeout in seconds for HTTP calls to the Composio API.
+<ParamField path="base_url" type="str">
+  Override the base URL for all API calls. Useful for proxies or self-hosted environments. When omitted, the URL is derived from `environment`.
 </ParamField>
 
-<ParamField path="max_retries" type="int" default="3">
-  Maximum number of automatic retries on transient network errors.
+<ParamField path="timeout" type="int">
+  Per-request timeout in seconds for HTTP calls to the Composio API. When omitted, uses the underlying HTTP client's default.
+</ParamField>
+
+<ParamField path="max_retries" type="int">
+  Maximum number of automatic retries on transient network errors. When omitted, uses the underlying HTTP client's default.
+</ParamField>
+
+<ParamField path="allow_tracking" type="bool" default="true">
+  When `True`, the SDK sends anonymised usage telemetry to help improve Composio. Set to `False` to opt out.
 </ParamField>
 
 <ParamField path="toolkit_versions" type="Dict[str, str]">

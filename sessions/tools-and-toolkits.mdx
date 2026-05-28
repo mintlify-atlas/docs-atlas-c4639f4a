@@ -1,6 +1,6 @@
 ---
-title: 'Tools and Toolkits in Composio'
-description: 'Composio tools are individual agent actions named TOOLKIT_ACTION. Toolkits group related tools for one service. Learn how to fetch, search, and filter tools.'
+title: 'Composio Tools and Toolkits: Fetch, Search, and Execute'
+description: 'Composio tools are individual agent actions named TOOLKIT_ACTION. Toolkits group related tools by service. Learn how to fetch, search, and execute tools.'
 ---
 
 A **tool** in Composio is a single callable action that an AI agent can invoke. Tools follow a consistent naming convention and are organized into **toolkits** — collections of related tools for a specific external service.
@@ -151,12 +151,14 @@ Execute a tool directly without going through an agent loop using `composio.tool
 const result = await composio.tools.execute(
   'GITHUB_CREATE_ISSUE',
   {
-    owner: 'my-org',
-    repo: 'my-repo',
-    title: 'Bug: login fails on Safari',
-    body: 'Steps to reproduce...',
-  },
-  { userId: 'user_123' }
+    userId: 'user_123',
+    arguments: {
+      owner: 'my-org',
+      repo: 'my-repo',
+      title: 'Bug: login fails on Safari',
+      body: 'Steps to reproduce...',
+    },
+  }
 );
 
 console.log(result.data);      // API response data

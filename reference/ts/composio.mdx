@@ -1,6 +1,6 @@
 ---
-title: 'Composio Class - TypeScript SDK Reference'
-description: 'Full reference for the Composio TypeScript SDK main class. Constructor options, instance properties, and top-level methods for sessions, tools, and authentication.'
+title: 'Composio Class – TypeScript SDK API Reference'
+description: 'Complete reference for the Composio TypeScript SDK main class: constructor options, instance properties, and top-level methods for sessions and tools.'
 ---
 
 The `Composio` class is the main entry point for the Composio TypeScript SDK. It initialises the API client, wires up all core models, and exposes top-level helpers for creating tool-router sessions, executing tools, and managing authentication.
@@ -114,6 +114,28 @@ const composio = new Composio({
     defaultHeaders: { 'x-request-id': '1234567890' },
   });
   ```
+</ParamField>
+
+<ParamField body="fileDownloadDir" type="string" optional>
+  Directory where files downloaded during tool execution (and `composio.files.download()`) are written. Defaults to `~/.composio/files`. Relative paths resolve against `process.cwd()`.
+
+  ```typescript
+  const composio = new Composio({ fileDownloadDir: '/tmp/composio-downloads' });
+  ```
+</ParamField>
+
+<ParamField body="fileUploadPathDenySegments" type="string[]" optional>
+  Additional path components to treat as sensitive during auto-upload checks. Merged with the SDK's built-in denylist (`.ssh`, `.aws`, `.env`, etc.).
+
+  ```typescript
+  const composio = new Composio({
+    fileUploadPathDenySegments: ['internal-secrets', 'private-keys'],
+  });
+  ```
+</ParamField>
+
+<ParamField body="host" type="string" optional>
+  Identifier for the host service running the SDK (e.g. `'mcp'`, `'apollo'`). Used for telemetry attribution. Safe to omit in most applications.
 </ParamField>
 
 <ParamField body="disableVersionCheck" type="boolean" optional>

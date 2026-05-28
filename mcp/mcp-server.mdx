@@ -1,5 +1,5 @@
 ---
-title: 'Creating Persistent Composio MCP Servers'
+title: 'Creating and Managing Persistent MCP Servers in Composio'
 description: 'Create named MCP server configurations that generate per-user streaming endpoints on demand. Manage MCP servers with the Composio SDK or CLI.'
 ---
 
@@ -44,8 +44,7 @@ import { Composio } from '@composio/core';
 
 const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
 
-const server = await composio.mcp.create({
-  name: 'my-team-mcp',
+const server = await composio.mcp.create('my-team-mcp', {
   toolkits: ['github', 'slack'],
   allowedTools: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS', 'SLACK_SEND_MESSAGE'],
   manuallyManageConnections: false,
@@ -56,18 +55,20 @@ console.log(server.id);   // "mcp_abc123"
 // Generate a live endpoint for a specific user
 const mcp = await server.generate('user-alice');
 console.log(mcp.url);           // Streaming HTTP URL for Alice
-console.log(mcp.allowedTools);  // Tools available to Alice
+console.log(mcp.allowedTools);  // Tools available to Alice (camelCase in TS)
 ```
 </CodeGroup>
 
 ### `create()` Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | `str` | Unique human-readable name for the server configuration |
-| `toolkits` | `list[str \| ConfigToolkit]` | Toolkits to include. Pass strings for all tools, or `ConfigToolkit` dicts to pin auth configs |
-| `allowed_tools` | `list[str] \| None` | Explicit list of tool slugs to expose. `None` exposes all tools from the given toolkits |
-| `manually_manage_connections` | `bool` | If `True`, your app manages connected accounts; if `False` (default), Composio handles OAuth |
+In **Python**, all parameters are keyword arguments. In **TypeScript**, `name` is the first positional argument and the remaining options are a second config object: `create(name, { toolkits, allowedTools, manuallyManageConnections })`.
+
+| Parameter (Python) | Parameter (TypeScript) | Type | Description |
+|--------------------|----------------------|------|-------------|
+| `name` | `name` *(1st arg)* | `str` | Unique human-readable name for the server configuration |
+| `toolkits` | `toolkits` | `list[str \| ConfigToolkit]` | Toolkits to include. Pass strings for all tools, or `ConfigToolkit` dicts to pin auth configs |
+| `allowed_tools` | `allowedTools` | `list[str] \| None` | Explicit list of tool slugs to expose. `None` exposes all tools from the given toolkits |
+| `manually_manage_connections` | `manuallyManageConnections` | `bool` | If `True`, your app manages connected accounts; if `False` (default), Composio handles OAuth |
 
 ## Listing Servers
 
@@ -167,15 +168,17 @@ console.log(mcp.userId);      // "user-bob"
 
 ### `MCPServerInstance` Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `str` | MCP server configuration ID |
-| `name` | `str` | Human-readable server name |
-| `type` | `str` | Transport type — always `"streamable_http"` |
-| `url` | `str` | User-specific connection URL for MCP clients |
-| `user_id` | `str` | The user ID this instance was generated for |
-| `allowed_tools` | `list[str]` | Tool slugs available through this endpoint |
-| `auth_configs` | `list[str]` | Auth configuration IDs linked to this server |
+The fields below use Python snake_case naming. TypeScript exposes identical fields in camelCase: `userId`, `allowedTools`, and `authConfigs`.
+
+| Field (Python) | Field (TypeScript) | Type | Description |
+|----------------|-------------------|------|-------------|
+| `id` | `id` | `str` | MCP server configuration ID |
+| `name` | `name` | `str` | Human-readable server name |
+| `type` | `type` | `str` | Transport type — always `"streamable_http"` |
+| `url` | `url` | `str` | User-specific connection URL for MCP clients |
+| `user_id` | `userId` | `str` | The user ID this instance was generated for |
+| `allowed_tools` | `allowedTools` | `list[str]` | Tool slugs available through this endpoint |
+| `auth_configs` | `authConfigs` | `list[str]` | Auth configuration IDs linked to this server |
 
 ## Full Example: Multi-User Agent Server
 

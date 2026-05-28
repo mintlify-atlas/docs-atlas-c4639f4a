@@ -1,6 +1,6 @@
 ---
-title: 'ToolRouterSession - TypeScript SDK Reference'
-description: 'Reference for the ToolRouterSession class returned by composio.create(). Methods for tools, authorize, search, execute, MCP, and file management.'
+title: 'ToolRouterSession – Composio TypeScript SDK Reference'
+description: 'Reference for the ToolRouterSession class returned by composio.create(). Methods for tools, authorize, search, execute, toolkits, update, and proxyExecute.'
 ---
 
 `ToolRouterSession` is the stateful session object returned by `composio.create()` and `composio.use()`. It encapsulates a server-side session that routes tool calls to the right connected accounts, exposes an MCP streaming endpoint, and provides helpers for authorization, search, and execution.
@@ -273,12 +273,16 @@ const connectionRequest = await session.authorize(toolkit, options?)
 
 **Returns:** `Promise<ConnectionRequest>`
 
+<ResponseField name="id" type="string">
+  The ID of the connected account being established.
+</ResponseField>
+
 <ResponseField name="redirectUrl" type="string">
   URL to redirect your user to in order to complete the OAuth flow.
 </ResponseField>
 
-<ResponseField name="connectedAccountId" type="string">
-  The ID of the connection being established.
+<ResponseField name="status" type="string | undefined">
+  Initial status of the connection (e.g. `'INITIATED'`).
 </ResponseField>
 
 ```typescript

@@ -1,5 +1,5 @@
 ---
-title: 'Verifying Composio Webhook Signatures'
+title: 'Composio Webhook Signature Verification with HMAC-SHA256'
 description: 'Validate that webhook payloads from Composio are authentic using HMAC-SHA256 signature verification. Composio supports V1, V2, and V3 signature formats.'
 ---
 
@@ -57,8 +57,8 @@ Composio normalises all three historical payload formats into the same `TriggerE
 
 | Version | Identifying Fields | Notes |
 |---------|--------------------|-------|
-| **V1**  | `trigger_name`, `connection_id`, `trigger_id`, `payload` | Legacy format; `user_id` and `toolkit_slug` are empty strings after normalisation |
-| **V2**  | `type`, `timestamp`, `data.connection_id` | Intermediate format with nested `data` envelope |
+| **V1**  | `trigger_name`, `connection_id`, `trigger_id`, `payload`, `log_id` | Legacy format; `user_id` and `toolkit_slug` are empty strings after normalisation |
+| **V2**  | `type`, `timestamp`, `log_id`, `data` (with nested `connection_id`) | Intermediate format with nested `data` envelope |
 | **V3**  | `type` starting with `composio.`, `metadata` dict, `id`, `data` | Current format; also covers non-trigger events such as `composio.connected_account.expired` |
 
 ## FastAPI Example

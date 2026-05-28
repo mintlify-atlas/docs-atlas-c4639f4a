@@ -1,5 +1,5 @@
 ---
-title: 'White-Label OAuth Flows with Composio'
+title: 'White-Label OAuth: Show Your Brand in Consent Flows'
 description: 'Replace Composio branding in OAuth flows with your own app credentials. Users see your app name and logo when granting permissions to connected services.'
 ---
 
@@ -198,14 +198,14 @@ await composio.experimental.updateAcl('ca_sharedAccount', {
 
 ```python Python
 # Open to all users except one
-composio.experimental.update_acl(
+client.experimental.update_acl(
     "ca_sharedAccount",
     allow_all_users=True,
     not_allowed_user_ids=["user_blocked"],
 )
 
 # Grant access to specific users only
-composio.experimental.update_acl(
+client.experimental.update_acl(
     "ca_sharedAccount",
     allowed_user_ids=["user_alice", "user_bob"],
 )

@@ -1,6 +1,6 @@
 ---
-title: 'Triggers: React to Events in Connected Apps'
-description: 'Composio triggers fire structured payloads when events happen in connected services. Use webhooks or polling to react to commits, messages, tickets, and more in real time.'
+title: 'Triggers: React to Events in Real-Time from Connected Apps'
+description: 'Composio triggers fire structured payloads when events occur in connected services. React to commits, messages, and tickets using webhooks or polling.'
 ---
 
 Composio triggers let your application react automatically to events happening inside connected third-party services. When a GitHub commit lands, a Slack message arrives, or a Linear ticket is updated, Composio normalises the raw webhook or polling data into a consistent `TriggerEvent` structure and delivers it to your handler — no custom webhook infrastructure required.
@@ -36,11 +36,11 @@ class TriggerEvent(TypedDict):
     toolkit_slug: str     # e.g. "github"
 
     payload: Optional[Dict[str, Any]]           # Normalised event data
-    original_payload: Optional[Dict[str, Any]]  # Raw payload from the source app
     metadata: TriggerMetadataSchema             # Full trigger + connection context
+    original_payload: Optional[Dict[str, Any]]  # Raw payload from the source app
 ```
 
-The `metadata` field contains the full trigger configuration, the connected account ID, the auth config, and the current account status — everything you need to trace an event back to its origin.
+The `metadata` field contains the full trigger configuration, the connected account ID, the auth config, the raw trigger data string, and the current account status — everything you need to trace an event back to its origin.
 
 ## Quick-Start: Subscribe to Trigger Events
 

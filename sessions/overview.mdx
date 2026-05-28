@@ -1,6 +1,6 @@
 ---
-title: 'Sessions: Per-User Tool Routing in Composio'
-description: 'Composio sessions give each user an isolated runtime context with their own tools, connected accounts, and execution environment. Learn how to create and use sessions.'
+title: 'Sessions: Isolated Per-User Tool Routing in Composio'
+description: 'Composio sessions scope tools, connected accounts, and sandboxes to a single user. Learn how to create, configure, and re-attach to sessions.'
 ---
 
 A **session** is the central primitive in Composio's tool-routing model. Each session is scoped to a single `userId` and carries its own set of enabled toolkits, connected accounts, and an optional persistent execution sandbox (the Workbench). Your AI agent interacts with session tools using `session.tools()`, which returns provider-wrapped tool definitions ready to pass directly to any LLM framework.

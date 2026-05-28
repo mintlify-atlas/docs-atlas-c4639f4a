@@ -217,8 +217,8 @@ Start a real-time listener in the terminal that prints trigger events as they ar
 
 ```bash
 composio triggers listen
-composio triggers listen --trigger GITHUB_COMMIT_EVENT
-composio triggers listen --user user_alice
+composio triggers listen --trigger-slug GITHUB_COMMIT_EVENT
+composio triggers listen --user-id user_alice
 ```
 
 ### `composio triggers info <slug>`
@@ -274,29 +274,29 @@ composio auth-configs create
 Generate TypeScript type stubs for toolkits, tools, and triggers.
 
 ```bash
-composio generate ts --toolkit github --output ./src/composio-types.ts
-composio generate ts --toolkit github --toolkit gmail --output ./types/
+composio generate ts --toolkits github --output-dir ./src/composio-types/
+composio generate ts --toolkits github --toolkits gmail --output-dir ./types/
 ```
 
 | Flag | Description |
 |---|---|
-| `--toolkit <slug>` | Toolkit to generate types for. Repeatable. |
-| `--output <path>` | Output file or directory path. |
-| `--compact` | Emit a compact single-file output. |
-| `--transpiled` | Emit plain JavaScript instead of TypeScript. |
+| `--toolkits <slug>` | Toolkit to generate types for. Repeatable (`--toolkits gmail --toolkits slack`). |
+| `--output-dir <path>` | Output directory path (alias: `-o`). |
+| `--compact` | Emit a single TypeScript file instead of one file per toolkit. |
+| `--transpiled` | Also emit transpiled JavaScript alongside TypeScript files. |
 
 ### `composio generate py`
 
 Generate Python type stubs for toolkits.
 
 ```bash
-composio generate py --toolkit github --output ./composio_types/
+composio generate py --toolkits github --output-dir ./composio_types/
 ```
 
 | Flag | Description |
 |---|---|
-| `--toolkit <slug>` | Toolkit to generate types for. Repeatable. |
-| `--output <path>` | Output directory path. |
+| `--toolkits <slug>` | Toolkit to generate types for. Repeatable (`--toolkits gmail --toolkits slack`). |
+| `--output-dir <path>` | Output directory path (alias: `-o`). |
 
 ---
 
@@ -388,14 +388,21 @@ composio dev
 
 ### `composio proxy`
 
-Proxy an authenticated API request through a connected account directly from the CLI.
+Proxy an authenticated API request through a connected account directly from the CLI. Provide a toolkit slug (`--toolkit`) to select which connected account's credentials are injected into the request.
 
 ```bash
-composio proxy \
-  --connected-account ca_abc123 \
-  --method GET \
-  --endpoint https://api.github.com/user
+composio proxy https://api.github.com/user --toolkit github
+composio proxy https://api.github.com/user --toolkit github --method GET
+composio proxy https://api.example.com/data --toolkit myapp -X POST -d '{"key":"value"}'
 ```
+
+| Argument / Flag | Description |
+|---|---|
+| `<url>` | Absolute or relative API endpoint to call. **Required.** |
+| `--toolkit <slug>`, `-t` | Toolkit slug whose connected account credentials are used. **Required.** |
+| `--method <method>`, `-X` | HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`. Defaults to `GET`. |
+| `--header <Name: value>`, `-H` | Request header in `"Name: value"` format. Repeatable. |
+| `--data <body>`, `-d` | Request body as raw text, JSON, `@file`, or `-` for stdin. |
 
 ---
 

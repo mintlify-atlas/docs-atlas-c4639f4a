@@ -92,7 +92,7 @@ def create_and_notify(input: CreateIssueInput, ctx: SessionContext):
         "GITHUB_CREATE_ISSUE",
         {"title": input.title, "body": input.body, "owner": "my-org", "repo": "my-repo"},
     )
-    return {"issue_created": result.successful, "user": ctx.user_id}
+    return {"issue_created": result.error is None, "user": ctx.user_id}
 ```
 
 ```typescript TypeScript
@@ -116,7 +116,7 @@ const createAndNotify = experimental_createTool('CREATE_AND_NOTIFY', {
       owner: 'my-org',
       repo: 'my-repo',
     });
-    return { issueCreated: result.successful, user: ctx.userId };
+    return { issueCreated: result.error === null, user: ctx.userId };
   },
 });
 ```

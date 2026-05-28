@@ -1,6 +1,6 @@
 ---
 title: 'Direct Tool Execution Without Sessions'
-description: 'Execute Composio tools directly with composio.tools.get() and composio.tools.execute() without creating a session. Use this for simple, single-user scenarios.'
+description: 'Execute Composio tools directly with composio.tools.get() and composio.tools.execute() without creating a session — ideal for simple single-user scripts.'
 ---
 
 Composio supports two patterns for working with tools: **sessions** (the recommended approach for most applications) and **direct execution** (a lighter-weight option for simple scripts). Direct execution skips session creation entirely — you fetch tools and execute them in a single, stateless call without any session lifecycle to manage.
@@ -50,7 +50,7 @@ const singleTool = await composio.tools.get('user_123', 'GITHUB_CREATE_ISSUE');
 
 ```python Python
 from composio import Composio
-from composio.provider import OpenAIProvider
+from composio_openai import OpenAIProvider
 
 composio = Composio(provider=OpenAIProvider())
 
@@ -130,6 +130,7 @@ Every `execute()` call returns the same shape regardless of the tool:
 | `data` | `dict` | The tool's output payload. Structure varies per tool. |
 | `error` | `string \| null` | Error message if execution failed; `null` on success. |
 | `successful` | `boolean` | `true` if the tool executed without errors. |
+| `logId` | `string` (TypeScript only) | Execution log identifier for debugging. |
 
 ## Fetching raw schemas
 

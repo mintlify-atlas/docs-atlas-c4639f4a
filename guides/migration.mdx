@@ -1,6 +1,6 @@
 ---
 title: 'Migrating to the Current Composio SDK'
-description: 'Upgrade from legacy Composio patterns to the current session-based API. Key changes: sessions replace direct tool fetching, and ToolRouter replaces the old Toolset pattern.'
+description: 'Upgrade from legacy ComposioToolSet to the current session-based API. Sessions replace direct tool fetching; provider adapters are now separate packages.'
 ---
 
 The current Composio SDK introduces a session-based model that replaces the older `ComposioToolSet` / direct toolset pattern. The new model is cleaner, more explicit about multi-user isolation, and is the foundation for MCP server support, dynamic tool discovery, and the `composio.experimental` surface. This guide walks through the key changes and provides side-by-side before/after examples.

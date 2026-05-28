@@ -1,5 +1,5 @@
 ---
-title: 'Managing Connected Accounts'
+title: 'Managing Per-User Connected Accounts with Composio'
 description: 'Connected accounts store per-user credentials for external services. Learn how to create, list, update, enable, disable, and delete connected accounts.'
 ---
 
@@ -19,12 +19,15 @@ Every connected account:
 | Status | Description |
 |---|---|
 | `INITIALIZING` | OAuth redirect flow has started; the user has not yet completed authorization |
+| `INITIATED` | Connect link created; waiting for the user to start the OAuth flow |
 | `ACTIVE` | Credentials are valid. Tool executions use this account automatically |
 | `EXPIRED` | Token expired and automatic refresh failed |
+| `FAILED` | Connection attempt failed before becoming active |
+| `REVOKED` | The provider revoked the token |
 | `DELETED` | Account was permanently deleted |
 
 <Note>
-  `INACTIVE` is intentionally excluded from the terminal states list. An inactive account can recover to `ACTIVE` after a re-authentication, unlike `EXPIRED`, `FAILED`, or `REVOKED`.
+  `INACTIVE` is intentionally excluded from the terminal states list. An inactive account can recover to `ACTIVE` after a re-authentication, unlike the terminal states (`EXPIRED`, `FAILED`, `REVOKED`).
 </Note>
 
 ## Creating a connected account
@@ -243,16 +246,9 @@ config_accounts = client.connected_accounts.list(
 
 ## Updating a connected account
 
-Use `update()` to rename an account with a human-readable alias. Aliases must be unique per user ID and toolkit within your project.
+### Updating the alias (Python)
 
-<CodeGroup>
-```typescript TypeScript
-// Set an alias
-await composio.connectedAccounts.update('ca_abc123', { alias: 'work-github' });
-
-// Clear the alias
-await composio.connectedAccounts.update('ca_abc123', { alias: '' });
-```
+Use `update()` in Python to rename an account with a human-readable alias. Aliases must be unique per user ID and toolkit within your project.
 
 ```python Python
 # Set an alias
@@ -261,7 +257,18 @@ client.connected_accounts.update("ca_abc123", alias="work-github")
 # Clear the alias
 client.connected_accounts.update("ca_abc123", alias="")
 ```
-</CodeGroup>
+
+### Updating enable/disable status (TypeScript)
+
+In TypeScript, `update()` accepts `{ enabled: boolean }` to toggle the account's active state. Use the dedicated `enable()` and `disable()` helpers for the most readable code (see the section below), or call `update()` directly when you need to pass a status flag programmatically.
+
+```typescript TypeScript
+// Disable via update()
+await composio.connectedAccounts.update('ca_abc123', { enabled: false });
+
+// Re-enable via update()
+await composio.connectedAccounts.update('ca_abc123', { enabled: true });
+```
 
 ## Enabling and disabling accounts
 
@@ -364,7 +371,7 @@ client.connected_accounts.link(
 | `connectedAccounts.waitForConnection(id, timeout?)` | Poll until a connection becomes `ACTIVE` |
 | `connectedAccounts.get(nanoid)` | Fetch a connected account by `ca_…` ID |
 | `connectedAccounts.list(query?)` | List connected accounts with optional filters |
-| `connectedAccounts.update(nanoid, params)` | Update alias or credentials on an account |
+| `connectedAccounts.update(nanoid, params)` | TypeScript: toggle `{ enabled: boolean }`; Python: update `alias` or credentials |
 | `connectedAccounts.enable(nanoid)` | Re-enable a disabled account |
 | `connectedAccounts.disable(nanoid)` | Disable an account without deleting it |
 | `connectedAccounts.refresh(nanoid)` | Force a credential refresh |

@@ -151,7 +151,7 @@ response = client.messages.create(
 
 ### `LangchainProvider`
 
-**Agentic** provider for [LangChain](https://python.langchain.com/). Wraps tools as `list[DynamicStructuredTool]` that LangChain agents can call autonomously.
+**Agentic** provider for [LangChain](https://python.langchain.com/). Wraps tools as `list[DynamicStructuredTool]` that LangChain agents can call autonomously. Import as `LangchainProvider` (lowercase `c`).
 
 ```bash
 pip install composio-langchain
@@ -181,7 +181,7 @@ executor.invoke({"input": "Star the composio repo"})
 
 ---
 
-### `LangGraphProvider`
+### `LanggraphProvider`
 
 **Agentic** provider for [LangGraph](https://langchain-ai.github.io/langgraph/). Returns tools compatible with LangGraph's node-based graph execution.
 
@@ -191,9 +191,9 @@ pip install composio-langgraph
 
 ```python
 from composio import Composio
-from composio_langgraph import LangGraphProvider
+from composio_langgraph import LanggraphProvider
 
-composio = Composio(provider=LangGraphProvider())
+composio = Composio(provider=LanggraphProvider())
 tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
 # Pass tools to your LangGraph ToolNode or bind_tools call
 ```
@@ -229,7 +229,7 @@ crew.kickoff()
 
 ---
 
-### `AutoGenProvider`
+### `AutogenProvider`
 
 **Agentic** provider for [Microsoft AutoGen](https://microsoft.github.io/autogen/).
 
@@ -239,9 +239,9 @@ pip install composio-autogen
 
 ```python
 from composio import Composio
-from composio_autogen import AutoGenProvider
+from composio_autogen import AutogenProvider
 
-composio = Composio(provider=AutoGenProvider())
+composio = Composio(provider=AutogenProvider())
 tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
 # Register tools with your AutoGen agents
 ```
@@ -285,7 +285,7 @@ tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
 
 ---
 
-### `GoogleADKProvider`
+### `GoogleAdkProvider`
 
 Provider for [Google Agent Development Kit (ADK)](https://google.github.io/adk-docs/).
 
@@ -295,9 +295,9 @@ pip install composio-google-adk
 
 ```python
 from composio import Composio
-from composio_google_adk import GoogleADKProvider
+from composio_google_adk import GoogleAdkProvider
 
-composio = Composio(provider=GoogleADKProvider())
+composio = Composio(provider=GoogleAdkProvider())
 tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
 ```
 
@@ -316,6 +316,24 @@ from composio import Composio
 from composio_gemini import GeminiProvider
 
 composio = Composio(provider=GeminiProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+```
+
+---
+
+### `ClaudeAgentSDKProvider`
+
+Provider for the [Anthropic Claude Agent SDK](https://github.com/anthropics/anthropic-sdk-python). Wraps tools for use with the native Claude Agents runtime.
+
+```bash
+pip install composio-claude-agent-sdk
+```
+
+```python
+from composio import Composio
+from composio_claude_agent_sdk import ClaudeAgentSDKProvider
+
+composio = Composio(provider=ClaudeAgentSDKProvider())
 tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
 ```
 

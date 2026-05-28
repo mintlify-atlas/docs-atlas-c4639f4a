@@ -1,6 +1,6 @@
 ---
-title: 'Model Context Protocol (MCP) with Composio'
-description: 'Every Composio session exposes a streaming HTTP MCP URL. Connect any MCP-compatible client — Claude Desktop, Cursor, VS Code, or your own agent — instantly.'
+title: 'Model Context Protocol (MCP) Overview — Composio'
+description: 'Composio sessions expose a live MCP URL. Connect Claude Desktop, Cursor, VS Code, or any MCP-compatible agent client — no custom wrapper code required.'
 ---
 
 Composio exposes every tool session as a live **Model Context Protocol (MCP)** endpoint. Any MCP-compatible client can connect to that URL and call Composio tools directly — no custom wrapper code, no polling, no extra infrastructure. Whether you are building a personal coding assistant in Cursor, a team automation in Claude Desktop, or a multi-user agent pipeline, Composio's MCP support is the fastest path from "tool available" to "agent can use it."
@@ -22,7 +22,7 @@ Composio exposes every tool session as a live **Model Context Protocol (MCP)** e
 
 ## Session MCP — Instant Endpoint
 
-When you create a session through the `experimental` ToolRouter API, the session object immediately carries a ready-to-use MCP URL:
+When you create a session through the ToolRouter API, the session object immediately carries a ready-to-use MCP URL:
 
 <CodeGroup>
 ```typescript TypeScript
@@ -30,7 +30,7 @@ import { Composio } from '@composio/core';
 
 const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
 
-const session = await composio.experimental.create('user-123', {
+const session = await composio.create('user-123', {
   toolkits: ['github', 'slack'],
   manageConnections: true,
 });
@@ -51,7 +51,7 @@ from composio import Composio
 
 composio = Composio(api_key="your-api-key")
 
-session = composio.experimental.create(
+session = composio.create(
     user_id="user-123",
     toolkits=["github", "slack"],
     manage_connections=True,

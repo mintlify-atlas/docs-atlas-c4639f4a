@@ -1,6 +1,6 @@
 ---
-title: 'TypeScript Provider Classes Reference'
-description: 'Reference for all Composio TypeScript provider adapters. Each provider wraps tools into the format expected by a specific AI framework.'
+title: 'Provider Classes – Composio TypeScript SDK Reference'
+description: 'Reference for all Composio TypeScript provider adapters. Each wraps tools into the format expected by AI frameworks like OpenAI, Anthropic, and Vercel AI.'
 ---
 
 Providers are adapter classes that translate Composio's internal tool format into the schema expected by a specific AI framework. You pass a provider instance to the `Composio` constructor, and the SDK uses it automatically whenever `tools.get()`, `session.tools()`, or `mcp.generate()` is called.
