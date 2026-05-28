@@ -1,0 +1,649 @@
+---
+title: 'TypeScript Provider Classes Reference'
+description: 'Reference for all Composio TypeScript provider adapters. Each provider wraps tools into the format expected by a specific AI framework.'
+---
+
+Providers are adapter classes that translate Composio's internal tool format into the schema expected by a specific AI framework. You pass a provider instance to the `Composio` constructor, and the SDK uses it automatically whenever `tools.get()`, `session.tools()`, or `mcp.generate()` is called.
+
+```typescript
+import { Composio } from '@composio/core';
+import { AnthropicProvider } from '@composio/anthropic';
+
+const composio = new Composio({
+  apiKey:   process.env.COMPOSIO_API_KEY,
+  provider: new AnthropicProvider(),
+});
+```
+
+---
+
+## Base Classes
+
+All providers extend one of two abstract base classes exported from `@composio/core`.
+
+### `BaseNonAgenticProvider`
+
+For frameworks where tool schemas and tool execution are separate concerns. `wrapTools()` returns a static list of tool definitions; execution happens separately (e.g. OpenAI's function calling, Anthropic's tool use, Google's function declarations).
+
+```typescript
+import { BaseNonAgenticProvider, Tool } from '@composio/core';
+
+abstract class BaseNonAgenticProvider<TToolCollection, TTool, TMcpResponse> {
+  abstract wrapTool(tool: Tool): TTool;
+  abstract wrapTools(tools: Tool[]): TToolCollection;
+  wrapMcpServerResponse?(data: McpUrlResponse): TMcpResponse;
+  executeTool(slug, body, modifiers?): Promise<ToolExecuteResponse>;
+}
+```
+
+### `BaseAgenticProvider`
+
+For agentic frameworks where tools are defined together with their execution callback. `wrapTools()` receives an `executeTool` function that the wrapped tool calls when invoked by the agent (e.g. Vercel AI SDK, Langchain, Mastra, OpenAI Agents).
+
+```typescript
+import { BaseAgenticProvider, Tool, ExecuteToolFn } from '@composio/core';
+
+abstract class BaseAgenticProvider<TToolCollection, TTool, TMcpResponse> {
+  abstract wrapTool(tool: Tool, executeTool: ExecuteToolFn): TTool;
+  abstract wrapTools(tools: Tool[], executeTool: ExecuteToolFn): TToolCollection;
+  wrapMcpServerResponse?(data: McpUrlResponse): TMcpResponse;
+  executeTool(slug, body, modifiers?): Promise<ToolExecuteResponse>;
+}
+```
+
+### Provider Interface Methods
+
+| Method | Base class | Description |
+|---|---|---|
+| `wrapTool(tool)` | Both | Converts a single `Tool` into the framework's tool type |
+| `wrapTools(tools)` | Non-agentic | Converts an array of tools into the framework's collection type |
+| `wrapTools(tools, executeFn)` | Agentic | Same, but also binds the execution callback |
+| `wrapMcpServerResponse(data)` | Both (optional) | Transforms an MCP URL response into the framework's MCP format |
+| `executeTool(slug, body, modifiers?)` | Both | Helper for manually executing a tool from within the provider |
+
+---
+
+## Providers
+
+### OpenAIProvider
+
+The default provider, bundled with `@composio/core`. Produces `OpenAI.ChatCompletionTool[]` compatible with the Chat Completions API.
+
+**Install**
+
+Already included — no separate install needed.
+
+**Import**
+
+```typescript
+import { Composio, OpenAIProvider } from '@composio/core';
+```
+
+**Usage**
+
+```typescript
+import { Composio, OpenAIProvider } from '@composio/core';
+import OpenAI from 'openai';
+
+const composio = new Composio({ provider: new OpenAIProvider() });
+const openai   = new OpenAI();
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const response = await openai.chat.completions.create({
+  model:    'gpt-4o',
+  messages: [{ role: 'user', content: 'List my repos' }],
+  tools,
+});
+
+// Handle tool calls
+const results = await composio.provider.handleToolCalls('user_123', response);
+```
+
+**Extra methods**
+
+| Method | Description |
+|---|---|
+| `executeToolCall(userId, toolCall, options?, modifiers?)` | Execute a single `ChatCompletionMessageFunctionToolCall` |
+| `handleToolCalls(userId, chatCompletion, options?, modifiers?)` | Process all tool calls in a `ChatCompletion` response |
+
+**Return type:** `OpenAI.ChatCompletionTool[]`
+
+---
+
+### OpenAIResponsesProvider
+
+Produces `OpenAI.Responses.FunctionTool[]` for use with the OpenAI Responses API. Supports `strict` mode.
+
+**Install**
+
+```bash
+npm install @composio/openai
+```
+
+**Import**
+
+```typescript
+import { OpenAIResponsesProvider } from '@composio/openai';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { OpenAIResponsesProvider } from '@composio/openai';
+import OpenAI from 'openai';
+
+const composio = new Composio({
+  provider: new OpenAIResponsesProvider({ strict: true }),
+});
+const openai = new OpenAI();
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const response = await openai.responses.create({
+  model: 'gpt-4o',
+  input: 'List my repos',
+  tools,
+});
+```
+
+**Constructor options**
+
+<ParamField body="strict" type="boolean" optional>
+  Enable strict function-calling mode. Defaults to `false`.
+</ParamField>
+
+**Return type:** `OpenAI.Responses.FunctionTool[]`
+
+---
+
+### AnthropicProvider
+
+Produces Anthropic tool definitions for Claude's tool-use API.
+
+**Install**
+
+```bash
+npm install @composio/anthropic
+```
+
+**Import**
+
+```typescript
+import { AnthropicProvider } from '@composio/anthropic';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { AnthropicProvider } from '@composio/anthropic';
+import Anthropic from '@anthropic-ai/sdk';
+
+const composio = new Composio({
+  provider: new AnthropicProvider({ cacheTools: true }),
+});
+const anthropic = new Anthropic();
+
+const tools   = await composio.tools.get('user_123', { toolkits: ['github'] });
+const message = await anthropic.messages.create({
+  model:      'claude-opus-4-5',
+  max_tokens: 1024,
+  tools,
+  messages:   [{ role: 'user', content: 'Create a GitHub issue' }],
+});
+
+// Handle tool calls
+const results = await composio.provider.handleToolCalls('user_123', message);
+```
+
+**Constructor options**
+
+<ParamField body="cacheTools" type="boolean" optional>
+  Enable Anthropic's ephemeral cache for tool definitions to reduce costs on repeated calls. Defaults to `false`.
+</ParamField>
+
+**Extra methods**
+
+| Method | Description |
+|---|---|
+| `executeToolCall(userId, toolUse, options?, modifiers?)` | Execute a single `AnthropicToolUseBlock` |
+| `handleToolCalls(userId, message, options?, modifiers?)` | Process all tool-use blocks in an Anthropic `Message` |
+
+**Return type:** `AnthropicTool[]` (`Anthropic.Tool[]`)
+
+---
+
+### VercelProvider
+
+Produces a Vercel AI SDK `ToolSet` — an object keyed by tool slug where each value is an `ai` `tool()` with a Zod schema and bound `execute` handler.
+
+**Install**
+
+```bash
+npm install @composio/vercel
+```
+
+**Import**
+
+```typescript
+import { VercelProvider } from '@composio/vercel';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { VercelProvider } from '@composio/vercel';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const composio = new Composio({ provider: new VercelProvider() });
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const { text } = await generateText({
+  model:  openai('gpt-4o'),
+  prompt: 'Create a GitHub issue',
+  tools,
+});
+```
+
+**Constructor options**
+
+<ParamField body="strict" type="boolean" optional>
+  Remove optional properties from tool schemas before wrapping. Defaults to `false`.
+</ParamField>
+
+**Return type:** `VercelToolSet` (`Record<string, Tool>` from the `ai` package)
+
+---
+
+### LangchainProvider
+
+Produces Langchain `DynamicStructuredTool[]` with Zod schemas and bound execution handlers.
+
+**Install**
+
+```bash
+npm install @composio/langchain
+```
+
+**Import**
+
+```typescript
+import { LangchainProvider } from '@composio/langchain';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { LangchainProvider } from '@composio/langchain';
+import { ChatOpenAI } from '@langchain/openai';
+import { AgentExecutor, createToolCallingAgent } from 'langchain/agents';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+
+const composio = new Composio({ provider: new LangchainProvider() });
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const llm   = new ChatOpenAI({ model: 'gpt-4o' });
+const prompt = ChatPromptTemplate.fromMessages([
+  ['system', 'You are a helpful assistant.'],
+  ['human',  '{input}'],
+  ['placeholder', '{agent_scratchpad}'],
+]);
+
+const agent   = await createToolCallingAgent({ llm, tools, prompt });
+const executor = new AgentExecutor({ agent, tools });
+
+const result = await executor.invoke({ input: 'Create a GitHub issue' });
+console.log(result.output);
+```
+
+**Return type:** `DynamicStructuredTool[]`
+
+---
+
+### OpenAIAgentsProvider
+
+Produces tool definitions for the `@openai/agents` package, compatible with OpenAI's Agents SDK.
+
+**Install**
+
+```bash
+npm install @composio/openai-agents
+```
+
+**Import**
+
+```typescript
+import { OpenAIAgentsProvider } from '@composio/openai-agents';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { OpenAIAgentsProvider } from '@composio/openai-agents';
+import { Agent, run } from '@openai/agents';
+
+const composio = new Composio({ provider: new OpenAIAgentsProvider() });
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const agent  = new Agent({ name: 'Dev Agent', tools });
+const result = await run(agent, 'Create a GitHub issue');
+console.log(result.finalOutput);
+```
+
+**Constructor options**
+
+<ParamField body="strict" type="boolean" optional>
+  Enforce strict schemas. Defaults to `false`.
+</ParamField>
+
+**Return type:** `Tool[]` (from `@openai/agents`)
+
+---
+
+### CloudflareProvider
+
+Produces `AiTextGenerationToolInput` definitions for Cloudflare Workers AI.
+
+**Install**
+
+```bash
+npm install @composio/cloudflare
+```
+
+**Import**
+
+```typescript
+import { CloudflareProvider } from '@composio/cloudflare';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { CloudflareProvider } from '@composio/cloudflare';
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const composio = new Composio({
+      apiKey:   env.COMPOSIO_API_KEY,
+      provider: new CloudflareProvider(),
+    });
+
+    const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+    const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      messages: [{ role: 'user', content: 'Create a GitHub issue' }],
+      tools: Object.values(tools),
+    });
+
+    ctx.waitUntil(composio.flush());
+    return Response.json(response);
+  },
+};
+```
+
+**Return type:** `Record<string, AiTextGenerationToolInput>`
+
+---
+
+### MastraProvider
+
+Produces Mastra `createTool()` instances compatible with Mastra AI agents.
+
+**Install**
+
+```bash
+npm install @composio/mastra
+```
+
+**Import**
+
+```typescript
+import { MastraProvider } from '@composio/mastra';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { MastraProvider } from '@composio/mastra';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+
+const composio = new Composio({ provider: new MastraProvider() });
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const agent = new Agent({
+  name:         'Dev Agent',
+  instructions: 'You are a helpful developer assistant.',
+  model:        openai('gpt-4o'),
+  tools,
+});
+
+const result = await agent.generate('Create a GitHub issue');
+console.log(result.text);
+```
+
+**Constructor options**
+
+<ParamField body="strict" type="boolean" optional>
+  Remove optional properties from schemas. Defaults to `false`.
+</ParamField>
+
+**Return type:** `MastraToolCollection` (`Record<string, MastraTool>`)
+
+---
+
+### GoogleProvider
+
+Produces `FunctionDeclaration[]` for Google's GenAI SDK (`@google/genai`). Compatible with both the Gemini Developer API and Vertex AI.
+
+**Install**
+
+```bash
+npm install @composio/google
+```
+
+**Import**
+
+```typescript
+import { GoogleProvider } from '@composio/google';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { GoogleProvider } from '@composio/google';
+import { GoogleGenAI } from '@google/genai';
+
+const composio = new Composio({ provider: new GoogleProvider() });
+const genai    = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const response = await genai.models.generateContent({
+  model:    'gemini-2.0-flash',
+  contents: 'Create a GitHub issue',
+  config:   { tools: [{ functionDeclarations: tools }] },
+});
+
+// Handle function calls
+if (response.functionCalls) {
+  for (const call of response.functionCalls) {
+    const result = await composio.provider.executeToolCall(
+      'user_123',
+      { name: call.name, args: call.args ?? {} }
+    );
+    console.log(result);
+  }
+}
+```
+
+**Extra methods**
+
+| Method | Description |
+|---|---|
+| `executeToolCall(userId, functionCall, options?, modifiers?)` | Execute a `GoogleGenAIFunctionCall` |
+| `handleToolCalls(userId, response, options?, modifiers?)` | Process all function calls in a `GenerateContentResponse` |
+
+**Return type:** `FunctionDeclaration[]` (from `@google/genai`)
+
+---
+
+### ClaudeAgentSDKProvider
+
+Produces tool definitions for Anthropic's `@anthropic-ai/claude-agent-sdk`. Wraps tools with Zod schemas for use as local MCP server tools within Claude code agents.
+
+**Install**
+
+```bash
+npm install @composio/claude-agent-sdk
+```
+
+**Import**
+
+```typescript
+import { ClaudeAgentSDKProvider } from '@composio/claude-agent-sdk';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { ClaudeAgentSDKProvider } from '@composio/claude-agent-sdk';
+import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+
+const composio = new Composio({ provider: new ClaudeAgentSDKProvider() });
+
+const tools    = await composio.tools.get('user_123', { toolkits: ['github'] });
+const mcpServer = createSdkMcpServer({
+  name:    'composio',
+  version: '1.0.0',
+  tools,
+});
+
+const result = await query({
+  prompt:     'Create a GitHub issue',
+  mcpServers: [mcpServer],
+});
+
+for await (const event of result) {
+  if (event.type === 'text') {
+    console.log(event.text);
+  }
+}
+```
+
+**Return type:** `ClaudeAgentTool[]`
+
+---
+
+### LlamaindexProvider
+
+Produces `LlamaindexTool[]` compatible with the `llamaindex` package.
+
+**Install**
+
+```bash
+npm install @composio/llamaindex
+```
+
+**Import**
+
+```typescript
+import { LlamaindexProvider } from '@composio/llamaindex';
+```
+
+**Usage**
+
+```typescript
+import { Composio } from '@composio/core';
+import { LlamaindexProvider } from '@composio/llamaindex';
+import { OpenAI } from 'llamaindex';
+import { ReActAgent } from 'llamaindex';
+
+const composio = new Composio({ provider: new LlamaindexProvider() });
+
+const tools = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+const llm   = new OpenAI({ model: 'gpt-4o' });
+const agent = new ReActAgent({ tools, llm });
+
+const response = await agent.chat({ message: 'Create a GitHub issue' });
+console.log(response.message.content);
+```
+
+**Return type:** `LlamaindexTool[]`
+
+---
+
+## Custom Provider Example
+
+Extend `BaseNonAgenticProvider` to create your own framework adapter:
+
+```typescript
+import {
+  BaseNonAgenticProvider,
+  Tool,
+  McpUrlResponse,
+  McpServerGetResponse,
+} from '@composio/core';
+
+// Define your framework's tool type
+type MyFrameworkTool = {
+  toolName:    string;
+  description: string;
+  parameters:  Record<string, unknown>;
+};
+
+type MyFrameworkToolCollection = MyFrameworkTool[];
+
+export class MyFrameworkProvider extends BaseNonAgenticProvider<
+  MyFrameworkToolCollection,
+  MyFrameworkTool,
+  McpServerGetResponse
+> {
+  readonly name = 'my-framework';
+
+  wrapTool(tool: Tool): MyFrameworkTool {
+    return {
+      toolName:    tool.slug,
+      description: tool.description ?? '',
+      parameters:  tool.inputParameters ?? {},
+    };
+  }
+
+  wrapTools(tools: Tool[]): MyFrameworkToolCollection {
+    return tools.map(tool => this.wrapTool(tool));
+  }
+
+  override wrapMcpServerResponse(data: McpUrlResponse): McpServerGetResponse {
+    return data.map(item => ({
+      url:  new URL(item.url),
+      name: item.name,
+    }));
+  }
+}
+
+// Use it
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ provider: new MyFrameworkProvider() });
+const tools    = await composio.tools.get('user_123', { toolkits: ['github'] });
+
+// tools is now MyFrameworkTool[]
+tools.forEach(t => console.log(t.toolName));
+```
+
+For **agentic** frameworks where tools need bound execution handlers, extend `BaseAgenticProvider` and accept `executeTool: ExecuteToolFn` as the second argument to both `wrapTool` and `wrapTools`.

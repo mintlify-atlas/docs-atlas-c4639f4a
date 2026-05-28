@@ -1,0 +1,97 @@
+---
+title: 'Model Context Protocol (MCP) with Composio'
+description: 'Every Composio session exposes a streaming HTTP MCP URL. Connect any MCP-compatible client — Claude Desktop, Cursor, VS Code, or your own agent — instantly.'
+---
+
+Composio exposes every tool session as a live **Model Context Protocol (MCP)** endpoint. Any MCP-compatible client can connect to that URL and call Composio tools directly — no custom wrapper code, no polling, no extra infrastructure. Whether you are building a personal coding assistant in Cursor, a team automation in Claude Desktop, or a multi-user agent pipeline, Composio's MCP support is the fastest path from "tool available" to "agent can use it."
+
+## Two Ways to Get an MCP Endpoint
+
+<CardGroup cols={2}>
+  <Card title="Session MCP" icon="link">
+    **Auto-generated per session.** Every `ToolRouter` session object exposes a `.mcp.url` and `.mcp.headers` property. These are ephemeral — they live as long as the session.
+
+    Best for: ad-hoc scripts, notebook experiments, and single-user agents.
+  </Card>
+  <Card title="Persistent MCP Servers" icon="server">
+    **Named, reusable configurations.** Create a named MCP server with `composio.mcp.create()`, then generate per-user URLs on demand. The server configuration persists across restarts.
+
+    Best for: multi-user SaaS products, team deployments, and Cursor/Claude Desktop integrations.
+  </Card>
+</CardGroup>
+
+## Session MCP — Instant Endpoint
+
+When you create a session through the `experimental` ToolRouter API, the session object immediately carries a ready-to-use MCP URL:
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const session = await composio.experimental.create('user-123', {
+  toolkits: ['github', 'slack'],
+  manageConnections: true,
+});
+
+// Use these directly in any MCP client
+console.log('MCP URL:', session.mcp.url);
+console.log('MCP Headers:', session.mcp.headers);
+
+// Pass to an MCP-aware AI client
+const mcpClient = new MCPClient({
+  serverUrl: session.mcp.url,
+  headers: session.mcp.headers,
+});
+```
+
+```python Python
+from composio import Composio
+
+composio = Composio(api_key="your-api-key")
+
+session = composio.experimental.create(
+    user_id="user-123",
+    toolkits=["github", "slack"],
+    manage_connections=True,
+)
+
+print("MCP URL:", session.mcp.url)
+print("MCP Headers:", session.mcp.headers)
+```
+</CodeGroup>
+
+## MCP Client Use Cases
+
+The MCP URL and headers work with any MCP-compatible client out of the box:
+
+<Steps>
+  <Step title="Claude Desktop">
+    Add the MCP URL to your `claude_desktop_config.json` under `mcpServers`. Claude will automatically discover all tools available in the session.
+  </Step>
+  <Step title="Cursor">
+    Open Cursor settings → MCP → add a new server entry with the URL and any required authorization headers from `session.mcp.headers`.
+  </Step>
+  <Step title="VS Code (Copilot)">
+    Use the MCP extension or GitHub Copilot's tool-calling feature with the Composio MCP endpoint as a registered tool server.
+  </Step>
+  <Step title="OpenAI MCP Clients">
+    Pass the URL and headers directly to the OpenAI Agents SDK's MCP client configuration when building tool-augmented agents.
+  </Step>
+</Steps>
+
+<Note>
+  Session MCP endpoints are **streaming HTTP** by default (`type: 'http'`). Some older clients may only support Server-Sent Events (`type: 'sse'`). Check `session.mcp.type` to confirm which transport is active for your session.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Persistent MCP Servers" icon="database" href="/mcp/mcp-server">
+    Create named MCP server configurations that generate per-user streaming endpoints on demand.
+  </Card>
+  <Card title="Provider Integrations" icon="puzzle-piece" href="/providers/overview">
+    Use Composio providers to integrate tools directly into OpenAI, LangChain, CrewAI, Vercel AI, and more.
+  </Card>
+</CardGroup>

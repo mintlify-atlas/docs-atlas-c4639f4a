@@ -1,0 +1,204 @@
+---
+title: 'Tools and Toolkits in Composio'
+description: 'Composio tools are individual agent actions named TOOLKIT_ACTION. Toolkits group related tools for one service. Learn how to fetch, search, and filter tools.'
+---
+
+A **tool** in Composio is a single callable action that an AI agent can invoke. Tools follow a consistent naming convention and are organized into **toolkits** — collections of related tools for a specific external service.
+
+## Naming Convention
+
+Every tool slug follows the pattern `TOOLKIT_ACTION` in `UPPER_SNAKE_CASE`. For example:
+
+- `GITHUB_CREATE_ISSUE` — from the `github` toolkit
+- `SLACK_SEND_MESSAGE` — from the `slack` toolkit
+- `GMAIL_SEARCH_EMAILS` — from the `gmail` toolkit
+- `NOTION_CREATE_PAGE` — from the `notion` toolkit
+
+The toolkit slug is always lowercase (e.g. `github`), while the full tool slug is uppercase (e.g. `GITHUB_CREATE_ISSUE`).
+
+## Getting Tools from a Session
+
+The primary way to access tools is through a session. Call `session.tools()` to get provider-wrapped tools for your AI framework. These are automatically scoped to the session's user and connected accounts.
+
+<CodeGroup>
+```typescript TypeScript
+const session = await composio.create('user_123', {
+  toolkits: ['github', 'slack'],
+});
+
+// Returns tools wrapped for your configured provider (e.g. OpenAI format)
+const tools = await session.tools();
+```
+
+```python Python
+session = composio.tool_router.create(
+    user_id="user_123",
+    toolkits=["github", "slack"],
+)
+
+# Returns tools wrapped for your configured provider
+tools = session.tools()
+```
+</CodeGroup>
+
+## Getting Tools Without a Session
+
+Use `composio.tools.get()` to fetch tools outside of a session context. This is useful for populating tool lists for non-session agent workflows.
+
+<CodeGroup>
+```typescript TypeScript
+// By toolkit
+const tools = await composio.tools.get('user_123', {
+  toolkits: ['github'],
+});
+
+// By specific tool slugs
+const tools = await composio.tools.get('user_123', {
+  tools: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS'],
+});
+
+// By semantic search
+const tools = await composio.tools.get('user_123', {
+  search: 'create a pull request',
+  limit: 5,
+});
+```
+
+```python Python
+# By toolkit
+tools = composio.tools.get(
+    user_id="user_123",
+    toolkits=["github"],
+)
+
+# By specific tool slugs
+tools = composio.tools.get(
+    user_id="user_123",
+    tools=["GITHUB_CREATE_ISSUE", "GITHUB_LIST_REPOS"],
+)
+
+# By semantic search
+tools = composio.tools.get(
+    user_id="user_123",
+    search="create a pull request",
+    limit=5,
+)
+```
+</CodeGroup>
+
+### `composio.tools.get()` Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` / `user_id` | `string` | The user whose connected accounts are used for tool execution. |
+| `toolkits` | `string[]` | Filter to tools belonging to specific toolkits. |
+| `tools` | `string[]` | Fetch specific tools by their full slug. |
+| `search` | `string` | Semantic search string — returns the most relevant tools for the query. |
+| `limit` | `number` | Maximum number of results to return. |
+| `modifiers` | `Modifier[]` | Schema, input, or output modifiers to apply. See [Modifiers](/sessions/modifiers). |
+
+## Fetching Raw Tool Schemas
+
+Sometimes you need the raw JSON schema for a tool (e.g. for inspection or custom rendering) rather than the provider-wrapped version. Use `getRawComposioTools()` / `get_raw_composio_tools()`:
+
+<CodeGroup>
+```typescript TypeScript
+// Get raw schemas for specific tools
+const rawTools = await composio.tools.getRawComposioTools({
+  tools: ['GITHUB_CREATE_ISSUE'],
+});
+
+console.log(rawTools[0].inputParameters); // Full JSON schema
+```
+
+```python Python
+# Get raw schemas for specific tools
+raw_tools = composio.tools.get_raw_composio_tools(
+    tools=["GITHUB_CREATE_ISSUE"],
+)
+
+print(raw_tools[0].input_parameters)  # Full JSON schema
+```
+</CodeGroup>
+
+## Searching for Tools
+
+Pass a natural-language `search` string to find tools by use case. This is the same mechanism the `COMPOSIO_SEARCH_TOOLS` meta tool uses at runtime.
+
+<CodeGroup>
+```typescript TypeScript
+const tools = await composio.tools.get('user_123', {
+  search: 'send an email with an attachment',
+  limit: 3,
+});
+```
+
+```python Python
+tools = composio.tools.get(
+    user_id="user_123",
+    search="send an email with an attachment",
+    limit=3,
+)
+```
+</CodeGroup>
+
+## Direct Tool Execution
+
+Execute a tool directly without going through an agent loop using `composio.tools.execute()`. This is useful for testing, scripting, or building non-LLM workflows.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await composio.tools.execute(
+  'GITHUB_CREATE_ISSUE',
+  {
+    owner: 'my-org',
+    repo: 'my-repo',
+    title: 'Bug: login fails on Safari',
+    body: 'Steps to reproduce...',
+  },
+  { userId: 'user_123' }
+);
+
+console.log(result.data);      // API response data
+console.log(result.successful); // true | false
+```
+
+```python Python
+result = composio.tools.execute(
+    "GITHUB_CREATE_ISSUE",
+    {
+        "owner": "my-org",
+        "repo": "my-repo",
+        "title": "Bug: login fails on Safari",
+        "body": "Steps to reproduce...",
+    },
+    user_id="user_123",
+)
+
+print(result["data"])       # API response data
+print(result["successful"]) # True | False
+```
+</CodeGroup>
+
+## Popular Toolkits
+
+| Toolkit Slug | Service | Description |
+|---|---|---|
+| `github` | GitHub | Issues, pull requests, repos, code search |
+| `slack` | Slack | Messages, channels, files, reactions |
+| `gmail` | Gmail | Email send, search, labels, attachments |
+| `notion` | Notion | Pages, databases, blocks, search |
+| `linear` | Linear | Issues, projects, cycles, teams |
+| `jira` | Jira | Issues, sprints, boards, projects |
+| `google-calendar` | Google Calendar | Events, calendars, attendees |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Direct Tool Execution" icon="bolt" href="/guides/direct-execution">
+    Execute tools directly from code without an agent in the loop.
+  </Card>
+  <Card title="Custom Tools" icon="puzzle-piece" href="/guides/custom-tools">
+    Define your own tools and toolkits and register them with Composio.
+  </Card>
+</CardGroup>

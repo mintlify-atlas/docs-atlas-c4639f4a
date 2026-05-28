@@ -1,0 +1,89 @@
+---
+title: 'Triggers: React to Events in Connected Apps'
+description: 'Composio triggers fire structured payloads when events happen in connected services. Use webhooks or polling to react to commits, messages, tickets, and more in real time.'
+---
+
+Composio triggers let your application react automatically to events happening inside connected third-party services. When a GitHub commit lands, a Slack message arrives, or a Linear ticket is updated, Composio normalises the raw webhook or polling data into a consistent `TriggerEvent` structure and delivers it to your handler — no custom webhook infrastructure required.
+
+## Trigger Types
+
+Composio supports two delivery mechanisms. Both produce the same `TriggerEvent` shape, so you can swap between them without changing handler code.
+
+<CardGroup cols={2}>
+  <Card title="Webhook" icon="bolt">
+    **Real-time HTTP POST.** The connected app pushes an event to a Composio-managed endpoint the instant something happens. Composio verifies the signature, normalises the payload, and routes it to your subscription or your own endpoint.
+
+    Best for: GitHub, Slack, Linear, and any service that natively supports outbound webhooks.
+  </Card>
+  <Card title="Polling" icon="clock">
+    **Scheduled polling.** Composio periodically queries the connected service's API and fires a trigger event whenever new data is detected (e.g. new email, new calendar event).
+
+    Best for: services that do not support push webhooks, or when you need a guaranteed-interval delivery regardless of the source.
+  </Card>
+</CardGroup>
+
+## The `TriggerEvent` Structure
+
+Every event delivered to a subscription handler is a `TriggerEvent` TypedDict with the following fields:
+
+```python
+class TriggerEvent(TypedDict):
+    id: str               # Nano ID of the trigger instance
+    uuid: str             # UUID of the trigger instance
+    user_id: str          # ID of the user whose account triggered the event
+
+    trigger_slug: str     # e.g. "GITHUB_COMMIT_EVENT"
+    toolkit_slug: str     # e.g. "github"
+
+    payload: Optional[Dict[str, Any]]           # Normalised event data
+    original_payload: Optional[Dict[str, Any]]  # Raw payload from the source app
+    metadata: TriggerMetadataSchema             # Full trigger + connection context
+```
+
+The `metadata` field contains the full trigger configuration, the connected account ID, the auth config, and the current account status — everything you need to trace an event back to its origin.
+
+## Quick-Start: Subscribe to Trigger Events
+
+<Steps>
+  <Step title="Install Composio">
+    ```bash
+    pip install composio
+    ```
+  </Step>
+
+  <Step title="Subscribe and register a handler">
+    ```python Python
+    from composio import Composio
+
+    composio = Composio(api_key="your-api-key")
+
+    # Open a real-time subscription (connects via Pusher)
+    sub = composio.triggers.subscribe()
+
+    # Register a handler filtered by trigger slug and user
+    @sub.handle(trigger_slug="GITHUB_COMMIT_EVENT", user_id="user-123")
+    def on_commit(event):
+        commit = event["payload"]
+        print(f"New commit by {commit['author']}: {commit['message']}")
+        print(f"URL: {commit['url']}")
+
+    # Block the main thread and process events until stopped
+    sub.wait_forever()
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  `sub.wait_forever()` loops until the WebSocket connection drops or `sub.stop()` is called. Use it in a long-running process such as a background worker or a dedicated service.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating and Managing Triggers" icon="sliders" href="/triggers/managing-triggers">
+    Create trigger instances, enable/disable them, list active triggers, and subscribe with multiple handlers.
+  </Card>
+  <Card title="Webhook Signature Verification" icon="shield-check" href="/triggers/webhook-verification">
+    Validate that incoming webhook payloads are authentic using HMAC-SHA256 signature verification.
+  </Card>
+</CardGroup>

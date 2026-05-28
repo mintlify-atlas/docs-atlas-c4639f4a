@@ -1,0 +1,242 @@
+---
+title: 'White-Label OAuth Flows with Composio'
+description: 'Replace Composio branding in OAuth flows with your own app credentials. Users see your app name and logo when granting permissions to connected services.'
+---
+
+By default, Composio's pre-built OAuth applications power every authentication flow. When a user connects their GitHub account, they see "Composio" on GitHub's consent screen. White-labeling replaces that with your own application — users see your app's name and logo throughout the OAuth process.
+
+## Why white-label?
+
+<CardGroup cols={3}>
+  <Card title="User trust" icon="shield-check">
+    Users are less likely to abandon an OAuth consent screen that shows your familiar brand instead of an unfamiliar third-party name.
+  </Card>
+  <Card title="Brand consistency" icon="paintbrush">
+    Keep the authentication experience cohesive with the rest of your product — same name, same logo, same tone.
+  </Card>
+  <Card title="Scope control" icon="sliders">
+    Request only the OAuth scopes your application actually needs, rather than the broad defaults Composio's shared apps request.
+  </Card>
+</CardGroup>
+
+## How it works
+
+When you create a **custom auth config** with your own `client_id` and `client_secret`, every connect link generated from that auth config sends users through your OAuth application's consent screen. Composio still handles the token exchange, storage, and refresh — you just supply the credentials.
+
+## Step-by-step setup
+
+<Steps>
+  <Step title="Register an OAuth app on the provider">
+    Go to the provider's developer console (e.g. [GitHub → Settings → Developer settings → OAuth Apps](https://github.com/settings/developers)) and create a new OAuth application.
+
+    Set the **Authorization callback URL** to:
+    ```
+    https://backend.composio.dev/api/v1/auth-apps/add
+    ```
+
+    <Note>
+      This is Composio's hosted callback endpoint. It receives the authorization code from the provider, exchanges it for tokens, and creates the connected account. You do not need to build or host a callback route yourself.
+    </Note>
+
+    Note down the **Client ID** and **Client Secret** — you'll need them in the next step.
+  </Step>
+
+  <Step title="Create a custom auth config">
+    Register your OAuth credentials with Composio by creating a custom auth config. Composio stores the secret encrypted and uses it only during token exchange.
+
+    <CodeGroup>
+    ```typescript TypeScript
+    import { Composio } from '@composio/core';
+
+    const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+    const authConfig = await composio.authConfigs.create('github', {
+      type: 'use_custom_auth',
+      name: 'Acme GitHub OAuth',
+      authScheme: 'OAUTH2',
+      credentials: {
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        // Request only the scopes your app needs
+        scopes: 'repo,read:org,user:email',
+      },
+    });
+
+    // Save this ID — you'll use it every time a user connects
+    console.log('Custom auth config ID:', authConfig.id);
+    ```
+
+    ```python Python
+    import composio
+
+    client = composio.Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+    auth_config = client.auth_configs.create(
+        toolkit="github",
+        options={
+            "type": "use_custom_auth",
+            "name": "Acme GitHub OAuth",
+            "auth_scheme": "OAUTH2",
+            "credentials": {
+                "client_id": os.environ["GITHUB_CLIENT_ID"],
+                "client_secret": os.environ["GITHUB_CLIENT_SECRET"],
+                "scopes": "repo,read:org,user:email",
+            },
+        },
+    )
+
+    print("Custom auth config ID:", auth_config.id)
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Generate connect links using your auth config ID">
+    Pass your custom auth config ID to `connectedAccounts.link()`. Every URL it generates routes users through your branded OAuth application.
+
+    <CodeGroup>
+    ```typescript TypeScript
+    const connectionRequest = await composio.connectedAccounts.link(
+      'user_123',
+      authConfig.id,                               // Your custom auth config
+      { callbackUrl: 'https://acme.com/dashboard' } // Optional post-auth redirect
+    );
+
+    // Send the user to this URL — they'll see your app on the consent screen
+    console.log('OAuth URL:', connectionRequest.redirectUrl);
+    ```
+
+    ```python Python
+    connection_request = client.connected_accounts.link(
+        user_id="user_123",
+        auth_config_id=auth_config.id,              # Your custom auth config
+        callback_url="https://acme.com/dashboard",  # Optional post-auth redirect
+    )
+
+    print("OAuth URL:", connection_request.redirect_url)
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Wait for the connection to complete">
+    After the user approves the consent screen, Composio exchanges the code for tokens and creates an `ACTIVE` connected account.
+
+    <CodeGroup>
+    ```typescript TypeScript
+    const connectedAccount = await connectionRequest.waitForConnection(120000);
+    console.log('Connected account ID:', connectedAccount.id);
+    // Users see your app name throughout — Composio stays invisible
+    ```
+
+    ```python Python
+    connected_account = connection_request.wait_for_connection(timeout=120.0)
+    print("Connected account ID:", connected_account.id)
+    ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Shared connections and ACL
+
+By default, each user gets their own private connected account. For multi-tenant scenarios where multiple users share one set of credentials (e.g. a single service account for a whole team), you can create a **SHARED** connection and control access with a per-user ACL.
+
+### Creating a shared connection
+
+<CodeGroup>
+```typescript TypeScript
+const connectionRequest = await composio.connectedAccounts.link(
+  'user_creator',  // The user who "owns" the connection
+  authConfig.id,
+  {
+    experimental: {
+      accountType: 'SHARED',
+      aclConfigForShared: {
+        allowAllUsers: true,           // Any user ID may use this connection
+        notAllowedUserIds: ['user_blocked'], // Deny list wins over allow
+      },
+    },
+  }
+);
+```
+
+```python Python
+connection_request = client.connected_accounts.link(
+    user_id="user_creator",
+    auth_config_id=auth_config.id,
+    experimental={
+        "account_type": "SHARED",
+        "acl_config_for_shared": {
+            "allow_all_users": True,
+            "not_allowed_user_ids": ["user_blocked"],
+        },
+    },
+)
+```
+</CodeGroup>
+
+### Updating the ACL after creation
+
+Use `composio.experimental.updateAcl()` (TypeScript) / `composio.experimental.update_acl()` (Python) to modify which users can access a shared connection without recreating it.
+
+<CodeGroup>
+```typescript TypeScript
+// Open to all users except one
+await composio.experimental.updateAcl('ca_sharedAccount', {
+  allowAllUsers: true,
+  notAllowedUserIds: ['user_blocked'],
+});
+
+// Grant access to specific users only
+await composio.experimental.updateAcl('ca_sharedAccount', {
+  allowedUserIds: ['user_alice', 'user_bob'],
+});
+
+// Revoke a previously-granted user
+await composio.experimental.updateAcl('ca_sharedAccount', {
+  allowedUserIds: ['user_alice'], // user_bob no longer in the list
+});
+```
+
+```python Python
+# Open to all users except one
+composio.experimental.update_acl(
+    "ca_sharedAccount",
+    allow_all_users=True,
+    not_allowed_user_ids=["user_blocked"],
+)
+
+# Grant access to specific users only
+composio.experimental.update_acl(
+    "ca_sharedAccount",
+    allowed_user_ids=["user_alice", "user_bob"],
+)
+```
+</CodeGroup>
+
+**ACL resolution rules (deny wins):**
+
+1. If `userId` is in `notAllowedUserIds` → **DENY**
+2. If `allowAllUsers` is `true` → **ALLOW**
+3. If `userId` is in `allowedUserIds` → **ALLOW**
+4. Otherwise → **DENY**
+
+<Warning>
+  Passing an empty array `[]` to `allowedUserIds` or `notAllowedUserIds` **clears** that list entirely. Clearing `notAllowedUserIds: []` silently re-grants access to every user you previously blocked. Always audit the allow side when clearing a deny list.
+</Warning>
+
+<Info>
+  ACL management is only valid on `SHARED` connections. Calling `updateAcl()` on a `PRIVATE` connection raises `ComposioAclOnlyForSharedError`.
+</Info>
+
+## Important notes
+
+<Note>
+  **Redirect URI** — the OAuth redirect URI must be registered on the provider as exactly:
+  ```
+  https://backend.composio.dev/api/v1/auth-apps/add
+  ```
+  If the URI does not match, the provider will reject the authorization callback and the connected account will not be created.
+</Note>
+
+<Warning>
+  **Keep your client secret safe** — never commit `client_secret` to source control or expose it in client-side code. Use environment variables and a secrets manager. Composio encrypts the secret at rest, but you are responsible for protecting it before it reaches the Composio API.
+</Warning>

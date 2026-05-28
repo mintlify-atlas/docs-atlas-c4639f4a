@@ -1,0 +1,313 @@
+---
+title: 'ToolRouter and ToolRouterSession - Python Reference'
+description: 'Reference for the Composio Python ToolRouter and ToolRouterSession classes. Create and manage sessions with composio.create() and composio.use().'
+---
+
+The `ToolRouter` manages user sessions that combine smart tool routing, MCP server exposure, and built-in connection management. Rather than fetching individual tools and wiring up execution manually, you create a session once and let Composio handle auth, search, and execution routing.
+
+`composio.create` and `composio.use` are convenience aliases for `composio.tool_router.create` and `composio.tool_router.use`.
+
+## `composio.create()` — Create a Session
+
+```python
+session = composio.create(user_id="user_alice", toolkits=["github", "gmail"])
+```
+
+Creates a new `ToolRouterSession` for the given user.
+
+### Parameters
+
+<ParamField path="user_id" type="str" required>
+  Identifier for the end-user. All tool executions and connection lookups within this session are scoped to this user.
+</ParamField>
+
+<ParamField path="toolkits" type="List[str] | ToolRouterToolkitsEnableConfig | ToolRouterToolkitsDisableConfig">
+  Toolkits to make available in the session.
+
+  - `["github", "slack"]` — shorthand enable list
+  - `{"enable": ["github"]}` — explicit allowlist
+  - `{"disable": ["slack"]}` — blocklist (all others available)
+</ParamField>
+
+<ParamField path="tools" type="Dict[str, ToolRouterToolsConfig]">
+  Per-toolkit tool filter. Keys are toolkit slugs; values can be:
+
+  - `["TOOL_SLUG_A"]` — shorthand enable list
+  - `{"enable": ["TOOL_SLUG_A"]}` — allowlist
+  - `{"disable": ["TOOL_SLUG_B"]}` — blocklist
+  - `{"tags": ["readOnlyHint"]}` — filter by MCP tags
+
+  ```python
+  session = composio.create(
+      user_id="user_alice",
+      tools={"github": {"enable": ["GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER"]}},
+  )
+  ```
+</ParamField>
+
+<ParamField path="tags" type="List[ToolRouterTag] | ToolRouterTagsEnableDisableConfig">
+  Filter all session tools by MCP annotation tags. See [`ToolRouterTag` values](#toolroutertag-values).
+</ParamField>
+
+<ParamField path="manage_connections" type="bool | ToolRouterManageConnectionsConfig" default="true">
+  Whether the session exposes connection-management meta-tools so the LLM can initiate OAuth flows.
+
+  - `True` — connection tools enabled (default)
+  - `False` — disable; you manage connections manually
+  - `{"enable": True, "callback_url": "https://example.com/callback"}` — custom OAuth redirect
+  - `{"wait_for_connections": True}` — block session until connections are ready
+</ParamField>
+
+<ParamField path="auth_configs" type="List[str]">
+  Pre-select specific auth config IDs to use for this session, instead of the default project-level configs.
+</ParamField>
+
+<ParamField path="connected_accounts" type="List[str]">
+  Pin specific connected account IDs to use in this session.
+</ParamField>
+
+<ParamField path="workbench" type="ToolRouterWorkbenchConfig">
+  Configure the remote code-execution sandbox attached to the session.
+
+  <Expandable title="Workbench config fields">
+    <ParamField path="workbench.enable" type="bool" default="true">
+      Whether the workbench (code-execution tools) is active.
+    </ParamField>
+    <ParamField path="workbench.sandbox_size" type="str" default="standard">
+      Compute tier for the sandbox. One of `"standard"` (1 vCPU / 1 GB), `"medium"` (2 vCPU / 2 GB), `"large"` (4 vCPU / 4 GB), `"xlarge"` (8 vCPU / 8 GB).
+    </ParamField>
+    <ParamField path="workbench.enable_proxy_execution" type="bool">
+      Allow the workbench to make arbitrary HTTP requests via the proxy tool.
+    </ParamField>
+    <ParamField path="workbench.auto_offload_threshold" type="int">
+      Maximum execution payload size in bytes before offloading to the workbench automatically.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="multi_account" type="bool | ToolRouterMultiAccountConfig">
+  Enable multi-account mode, allowing the session to connect multiple accounts for a single toolkit.
+
+  <Expandable title="Multi-account config fields">
+    <ParamField path="multi_account.enable" type="bool">
+      Explicitly enable or disable multi-account mode.
+    </ParamField>
+    <ParamField path="multi_account.max_accounts_per_toolkit" type="int">
+      Maximum connected accounts per toolkit (2–10). Defaults to 5 when multi-account is enabled.
+    </ParamField>
+    <ParamField path="multi_account.require_explicit_selection" type="bool" default="false">
+      When `True`, require the LLM to explicitly select an account even when only one is connected.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preload" type="ToolRouterPreloadConfig">
+  Expose tool schemas directly in `session.tools()` without requiring the LLM to call the search meta-tool first.
+
+  ```python
+  preload={"tools": ["GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER"]}
+  # or
+  preload={"tools": "all"}  # preload every available tool
+  ```
+</ParamField>
+
+<ParamField path="session_preset" type="str">
+  Preset configuration shortcut. `"direct_tools"` is equivalent to setting `manage_connections=False`, `workbench={"enable": False}`, and `preload={"tools": "all"}` simultaneously.
+</ParamField>
+
+<ParamField path="experimental" type="ToolRouterExperimentalConfig">
+  Experimental session options.
+
+  <Expandable title="Experimental config fields">
+    <ParamField path="experimental.assistive_prompt" type="ToolRouterAssistivePromptConfig">
+      Configuration for the assistive system prompt injected by Composio. Pass `{"user_timezone": "America/New_York"}` for timezone-aware prompts.
+    </ParamField>
+    <ParamField path="experimental.custom_tools" type="List[CustomTool]">
+      Custom Python functions to bind to this session.
+    </ParamField>
+    <ParamField path="experimental.custom_toolkits" type="List[ExperimentalToolkit]">
+      Custom grouped toolkits to bind to this session.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+---
+
+## `composio.use()` — Resume a Session
+
+```python
+session = composio.use(
+    session_id="sess_abc123",
+    custom_tools=[my_local_tool],
+)
+```
+
+Attach to an existing session by ID and return a `ToolRouterSession`. You can supply custom tools that are injected into the resumed session's tool list.
+
+### Parameters
+
+<ParamField path="session_id" type="str" required>
+  The ID of the session to resume. Obtain this from `session.session_id` after calling `composio.create()`.
+</ParamField>
+
+<ParamField path="custom_tools" type="List[CustomTool]">
+  Custom tool definitions to inject into the resumed session.
+</ParamField>
+
+<ParamField path="custom_toolkits" type="List[ExperimentalToolkit]">
+  Custom toolkit definitions to inject into the resumed session.
+</ParamField>
+
+---
+
+## `ToolRouterSession` — Session Methods
+
+A `ToolRouterSession` is returned by both `create()` and `use()`.
+
+### `session.tools()`
+
+Return provider-wrapped tools ready for your AI framework.
+
+```python
+tools = session.tools()
+# Pass directly to openai.chat.completions.create(tools=tools, ...)
+```
+
+<ParamField path="modifiers" type="Modifiers">
+  Optional modifier list applied to tool schemas and executions.
+</ParamField>
+
+### `session.search()`
+
+Search for tools within the session by semantic use case.
+
+```python
+result = session.search(query="send an email")
+```
+
+<ParamField path="query" type="str" required>
+  Natural-language description of the task you want to accomplish.
+</ParamField>
+
+### `session.execute()`
+
+Execute a tool directly within the session, without going through an LLM.
+
+```python
+result = session.execute(
+    "GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER",
+    arguments={"owner": "composiohq", "repo": "composio"},
+)
+```
+
+<ParamField path="tool_slug" type="str" required>
+  Tool slug to execute. Custom tool original slugs (e.g. `"MY_TOOL"`) and final slugs (e.g. `"LOCAL_MY_TOOL"`) are both accepted.
+</ParamField>
+
+<ParamField path="arguments" type="Dict[str, Any]">
+  Input arguments for the tool.
+</ParamField>
+
+<ParamField path="account" type="str">
+  Account ID or alias for multi-account sessions.
+</ParamField>
+
+### `session.authorize()`
+
+Initiate an OAuth flow for a toolkit and return a redirect URL.
+
+```python
+connection = session.authorize("github")
+print(connection.redirect_url)  # send user here
+```
+
+<ParamField path="toolkit" type="str" required>
+  Toolkit slug to authorize (e.g. `"github"`, `"gmail"`).
+</ParamField>
+
+<ParamField path="callback_url" type="str">
+  Override the OAuth redirect/callback URL.
+</ParamField>
+
+<ParamField path="alias" type="str">
+  Human-readable alias for the connection. Must be unique per `user_id` and toolkit within the project.
+</ParamField>
+
+### `session.toolkits()`
+
+List toolkit connection states for this session, including whether each toolkit is authenticated.
+
+```python
+details = session.toolkits(is_connected=True)
+for state in details.items:
+    print(state.toolkit_slug, state.is_active)
+```
+
+### `session.patch()`
+
+Update session settings (toolkits, tools, tags, etc.) without creating a new session.
+
+---
+
+## Session Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `session.session_id` | `str` | Unique identifier for this session. |
+| `session.mcp.url` | `str` | MCP server URL for this session — pass directly to MCP-compatible frameworks. |
+| `session.mcp.headers` | `dict` | Auth headers required for the MCP server URL. |
+| `session.experimental.files` | `ToolRouterSessionFilesMount` | Access the session's persistent `/mnt/files/` workbench mount. |
+| `session.experimental.assistive_prompt` | `str` | The assistive system prompt generated by Composio for this session. |
+
+---
+
+## `ToolRouterTag` Values
+
+Used to filter tools by their MCP annotation tags.
+
+| Tag | Description |
+|---|---|
+| `"readOnlyHint"` | Tool only reads data; never modifies state. |
+| `"destructiveHint"` | Tool may delete or overwrite existing data. |
+| `"idempotentHint"` | Calling the tool multiple times has the same effect as calling it once. |
+| `"openWorldHint"` | Tool can interact with external entities beyond the local environment. |
+
+---
+
+## Full Example
+
+```python
+import os
+from composio import Composio
+from composio_openai import OpenAIProvider
+from openai import OpenAI
+
+composio = Composio(provider=OpenAIProvider())
+client = OpenAI()
+
+# Create a session for the user
+session = composio.create(
+    user_id="user_alice",
+    toolkits=["github", "gmail"],
+    manage_connections=True,
+    preload={"tools": ["GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER"]},
+)
+
+print("Session ID:", session.session_id)
+print("MCP URL:", session.mcp.url)
+
+tools = session.tools()
+messages = [{"role": "user", "content": "Star the composio/composio repo on GitHub"}]
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=messages,
+    tools=tools,
+)
+
+print(response.choices[0].message.content)
+```
+
+<Tip>
+  Store `session.session_id` and pass it to `composio.use(session_id=...)` to resume the session in future requests without re-creating it.
+</Tip>

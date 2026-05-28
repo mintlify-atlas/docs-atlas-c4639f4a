@@ -1,0 +1,127 @@
+---
+title: 'Composio: Tool Integrations for AI Agents'
+description: 'Composio is an SDK for TypeScript and Python that connects AI agents to 1,000+ external tools with built-in auth, sessions, triggers, and MCP support.'
+---
+
+Composio gives your AI agents the ability to act — not just reason. With a single SDK call you can connect any agent to **1,000+ real-world integrations** (GitHub, Slack, Gmail, Notion, and many more), complete with managed authentication, ephemeral sessions, event triggers, and full Model Context Protocol (MCP) support.
+
+Both a **TypeScript** package (`@composio/core`) and a **Python** package (`composio`) ship from the same repository and stay in sync, so you can use whichever language your agent stack requires.
+
+## Key Concepts
+
+| Concept | What it is |
+|---|---|
+| **Tools** | Individual callable actions or read operations exposed by an integration (e.g. `GITHUB_CREATE_ISSUE`). |
+| **Toolkits** | Named bundles of related tools for one service (e.g. `github`, `slack`, `gmail`). |
+| **Sessions** | Ephemeral, per-user runtime contexts created with `composio.create(userId, …)` that scope tool access, auth, and MCP endpoints to a single agent run. |
+| **Providers** | Thin adapter packages (`@composio/openai-agents`, `composio-langchain`, …) that wrap Composio tools into the format expected by each AI framework. |
+| **Triggers** | Webhook and polling listeners that fire your callback when an external event occurs (e.g. a new GitHub PR, an incoming email). |
+| **MCP** | Every session exposes a live [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `session.mcp.url`, letting MCP-compatible clients consume Composio tools natively. |
+
+---
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install Composio, get an API key, and run your first agent tool call in under 5 minutes.
+  </Card>
+  <Card title="How It Works" icon="circle-info" href="/how-it-works">
+    Understand sessions, tool routing, auth configs, connected accounts, triggers, and MCP.
+  </Card>
+  <Card title="Providers" icon="plug" href="/providers/overview">
+    Browse every supported AI framework — OpenAI, Anthropic, LangChain, LlamaIndex, and more.
+  </Card>
+  <Card title="API Reference" icon="code" href="https://docs.composio.dev/api-reference">
+    Full REST API reference for the Composio backend.
+  </Card>
+</CardGroup>
+
+---
+
+## Provider Support
+
+The following AI frameworks and platforms are supported across the TypeScript and Python SDKs.
+
+| Provider | TypeScript | Python |
+|---|:---:|:---:|
+| OpenAI | ✅ | ✅ |
+| OpenAI Agents | ✅ | ✅ |
+| Anthropic | ✅ | ✅ |
+| LangChain | ✅ | ✅ |
+| LangGraph | ✅\* | ✅ |
+| LlamaIndex | ✅ | ✅ |
+| Vercel AI SDK | ✅ | ❌ |
+| Google Gemini | ✅ | ✅ |
+| Google ADK | ❌ | ✅ |
+| Mastra | ✅ | ❌ |
+| Cloudflare Workers AI | ✅ | ❌ |
+| CrewAI | ❌ | ✅ |
+| AutoGen | ❌ | ✅ |
+
+\* LangGraph for TypeScript is supported via the `@composio/langchain` package.
+
+<Note>
+  Don't see your framework? Learn how to [build a custom provider](https://docs.composio.dev/sdk/typescript/custom-providers) to integrate with any AI framework.
+</Note>
+
+---
+
+## Package Ecosystem
+
+### TypeScript — npm
+
+**Core**
+
+| Package | Description |
+|---|---|
+| [`@composio/core`](https://www.npmjs.com/package/@composio/core) | Main SDK — `Composio` class, sessions, tools, triggers, MCP |
+
+**Provider adapters**
+
+| Package | Framework |
+|---|---|
+| [`@composio/openai`](https://www.npmjs.com/package/@composio/openai) | OpenAI Chat Completions |
+| [`@composio/openai-agents`](https://www.npmjs.com/package/@composio/openai-agents) | OpenAI Agents SDK |
+| [`@composio/anthropic`](https://www.npmjs.com/package/@composio/anthropic) | Anthropic Claude |
+| [`@composio/langchain`](https://www.npmjs.com/package/@composio/langchain) | LangChain & LangGraph |
+| [`@composio/llamaindex`](https://www.npmjs.com/package/@composio/llamaindex) | LlamaIndex.TS |
+| [`@composio/vercel`](https://www.npmjs.com/package/@composio/vercel) | Vercel AI SDK |
+| [`@composio/google`](https://www.npmjs.com/package/@composio/google) | Google Gemini |
+| [`@composio/mastra`](https://www.npmjs.com/package/@composio/mastra) | Mastra |
+| [`@composio/cloudflare`](https://www.npmjs.com/package/@composio/cloudflare) | Cloudflare Workers AI |
+
+**Utilities**
+
+| Package | Description |
+|---|---|
+| [`@composio/json-schema-to-zod`](https://www.npmjs.com/package/@composio/json-schema-to-zod) | Convert JSON Schema to Zod schemas |
+| [`@composio/ts-builders`](https://www.npmjs.com/package/@composio/ts-builders) | Internal type-builder helpers |
+
+### Python — PyPI
+
+**Core**
+
+| Package | Description |
+|---|---|
+| [`composio`](https://pypi.org/project/composio/) | Main SDK — `Composio` class, sessions, tools, triggers, MCP |
+
+**Provider adapters**
+
+| Package | Framework |
+|---|---|
+| [`composio-openai`](https://pypi.org/project/composio-openai/) | OpenAI Chat Completions |
+| [`composio-openai-agents`](https://pypi.org/project/composio-openai-agents/) | OpenAI Agents SDK |
+| [`composio-anthropic`](https://pypi.org/project/composio-anthropic/) | Anthropic Claude |
+| [`composio-langchain`](https://pypi.org/project/composio-langchain/) | LangChain |
+| [`composio-langgraph`](https://pypi.org/project/composio-langgraph/) | LangGraph |
+| [`composio-llamaindex`](https://pypi.org/project/composio-llamaindex/) | LlamaIndex |
+| [`composio-crewai`](https://pypi.org/project/composio-crewai/) | CrewAI |
+| [`composio-autogen`](https://pypi.org/project/composio-autogen/) | AutoGen |
+| [`composio-gemini`](https://pypi.org/project/composio-gemini/) | Google Gemini |
+| [`composio-google`](https://pypi.org/project/composio-google/) | Google AI |
+| [`composio-google-adk`](https://pypi.org/project/composio-google-adk/) | Google Agent Development Kit |
+
+---
+
+<Note>
+  You need a free API key to use Composio. Visit [composio.dev](https://composio.dev) to create an account and copy your key from the dashboard. Set it as the `COMPOSIO_API_KEY` environment variable — all SDK constructors pick it up automatically.
+</Note>

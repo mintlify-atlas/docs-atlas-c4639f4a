@@ -1,0 +1,119 @@
+---
+title: 'Composio CLI Overview and Installation'
+description: 'Install the Composio CLI to manage tool connections, search integrations, and generate typed code from the terminal. Available via npm, binary download, or install script.'
+---
+
+The Composio CLI (`composio`) lets you authenticate, browse toolkits and tools, manage connected accounts, listen to trigger events, generate typed code stubs, and inspect logs — all from your terminal. It is the fastest way to explore the Composio ecosystem and wire up integrations without touching the API directly.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install -g @composio/cli
+```
+
+```bash curl (install script)
+curl -fsSL https://get.composio.dev | bash
+```
+
+```bash Binary (macOS arm64)
+# Download the latest binary for macOS Apple Silicon
+curl -L https://github.com/ComposioHQ/composio/releases/latest/download/composio-macos-arm64 \
+  -o /usr/local/bin/composio
+chmod +x /usr/local/bin/composio
+```
+
+</CodeGroup>
+
+Verify the installation:
+
+```bash
+composio --version
+```
+
+## Authentication
+
+### Login
+
+```bash
+composio login
+```
+
+Opens a browser window to complete the OAuth login flow. After successful authentication your API key is stored locally and used for all subsequent CLI commands. Use flags to change the default behaviour:
+
+| Flag | Description |
+|---|---|
+| `--no-browser` | Print the login URL instead of opening a browser window. |
+| `--no-wait` | Print the login URL and session info, then exit immediately. |
+| `--poll` | Complete the most recent pending browser login session. |
+| `--user-api-key <key>` | Log in directly with a Composio user API key (non-interactive). |
+| `--org <id\|name>` | Set the active organisation during login. |
+
+### Verify who you are logged in as
+
+```bash
+composio whoami
+```
+
+Displays your account type (human or agent), email, organisation name, and project. API keys are never printed.
+
+## Global Flags
+
+These flags are accepted by every `composio` command:
+
+| Flag | Description |
+|---|---|
+| `--help`, `-h` | Show help for the current command or sub-command. |
+| `--version` | Print the installed CLI version and exit. |
+| `--json` | Output results as machine-readable JSON. Useful for scripting and CI. |
+
+## Configuration
+
+```bash
+composio config
+```
+
+View and edit CLI configuration such as the active organisation and project, default environment, and local tool settings.
+
+## Agent Mode (ACP)
+
+The CLI has a dedicated `agent` sub-command for managing autonomous agent identities via the Agent Communication Protocol (ACP):
+
+```bash
+composio agent login    # Authenticate as an agent identity
+composio agent whoami   # Show the current agent identity
+composio agent inbox    # View messages and handoffs in the agent inbox
+composio agent signup   # Create a new agent identity
+composio agent claim    # Claim an agent identity
+```
+
+Agent identities are separate from human user accounts and are designed for production deployments where your AI agent needs a persistent, auditable identity.
+
+## Upgrading
+
+```bash
+composio upgrade
+```
+
+Upgrades the CLI to the latest stable release. Pass `--beta` to upgrade to the latest beta, or specify an exact version:
+
+```bash
+composio upgrade 0.13.1
+composio upgrade --beta
+```
+
+<Tip>
+  Every command and sub-command accepts `--help` to print its full usage, options, and examples. Run `composio --help` to see the top-level command tree.
+</Tip>
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="CLI Command Reference" icon="terminal" href="/reference/cli/commands">
+    Full reference for every CLI command, flag, and sub-command.
+  </Card>
+  <Card title="CLI Guide" icon="book" href="/guides/cli">
+    Hands-on guide to common CLI workflows: connecting accounts, searching tools, and generating code.
+  </Card>
+</CardGroup>

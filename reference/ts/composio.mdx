@@ -1,0 +1,320 @@
+---
+title: 'Composio Class - TypeScript SDK Reference'
+description: 'Full reference for the Composio TypeScript SDK main class. Constructor options, instance properties, and top-level methods for sessions, tools, and authentication.'
+---
+
+The `Composio` class is the main entry point for the Composio TypeScript SDK. It initialises the API client, wires up all core models, and exposes top-level helpers for creating tool-router sessions, executing tools, and managing authentication.
+
+## Installation
+
+```bash
+npm install @composio/core
+```
+
+## Import
+
+```typescript
+import { Composio } from '@composio/core';
+```
+
+## Constructor
+
+```typescript
+new Composio(config?: ComposioConfig)
+```
+
+Instantiates the SDK. All fields are optional — the constructor reads `COMPOSIO_API_KEY` from the environment when `apiKey` is omitted.
+
+```typescript
+import { Composio } from '@composio/core';
+
+// Minimal — reads COMPOSIO_API_KEY from env
+const composio = new Composio();
+
+// Explicit configuration
+const composio = new Composio({
+  apiKey: 'your-api-key',
+  baseURL: 'https://backend.composio.dev',
+  toolkitVersions: {
+    github: '20250906_01',
+    slack:  '20250902_00',
+  },
+});
+```
+
+### Constructor Parameters
+
+<ParamField body="apiKey" type="string" optional>
+  API key for the Composio API. Falls back to the `COMPOSIO_API_KEY` environment variable when omitted.
+
+  ```typescript
+  const composio = new Composio({ apiKey: 'sk-...' });
+  ```
+</ParamField>
+
+<ParamField body="provider" type="BaseComposioProvider" optional>
+  The AI-framework adapter to use for wrapping tools. Defaults to `OpenAIProvider` (bundled with the core package). Pass any other provider from `@composio/<framework>`.
+
+  ```typescript
+  import { AnthropicProvider } from '@composio/anthropic';
+
+  const composio = new Composio({ provider: new AnthropicProvider() });
+  ```
+</ParamField>
+
+<ParamField body="baseURL" type="string" optional>
+  Override the Composio API base URL. Useful when self-hosting or pointing at a staging environment.
+
+  ```typescript
+  const composio = new Composio({ baseURL: 'https://staging.composio.dev' });
+  ```
+</ParamField>
+
+<ParamField body="toolkitVersions" type="Record<string, string>" optional>
+  Pin specific toolkit versions so that tool schemas and execution are stable across deployments. Keys are lowercase toolkit slugs; values are version strings. Can also be set via `COMPOSIO_TOOLKIT_VERSION_<TOOLKIT_SLUG>` environment variables.
+
+  ```typescript
+  const composio = new Composio({
+    toolkitVersions: {
+      github: '20250909_00',
+      gmail:  '20250902_00',
+    },
+  });
+  ```
+</ParamField>
+
+<ParamField body="dangerouslyAllowAutoUploadDownloadFiles" type="boolean" optional>
+  Opt in to automatic file staging during tool execution. When `true`, the SDK intercepts local file paths and `http(s)://` URLs in tool inputs, uploads them to Composio's file service, and substitutes the resulting descriptor before the call reaches the backend. Disabled (`false`) by default.
+</ParamField>
+
+<ParamField body="sensitiveFileUploadProtection" type="boolean" optional>
+  When `true` (the default), local file paths for auto-upload are checked against a built-in denylist of sensitive path segments (`.ssh`, `.aws`, etc.) and credential-like file names (`.env`, private key files). Set to `false` only in trusted environments.
+</ParamField>
+
+<ParamField body="fileUploadDirs" type="string[] | false" optional>
+  Allowlist of directories from which the SDK may read local files during **automatic** upload. `undefined` (default) uses `~/.composio/temp`. `false` blocks all local paths while still allowing URLs and `File`/`Blob` objects. A non-empty string array replaces the default entirely.
+
+  ```typescript
+  const composio = new Composio({
+    dangerouslyAllowAutoUploadDownloadFiles: true,
+    fileUploadDirs: ['/safe/uploads', '~/.composio/temp'],
+  });
+  ```
+</ParamField>
+
+<ParamField body="allowTracking" type="boolean" optional>
+  Enable or disable anonymous usage analytics. Defaults to `true`.
+</ParamField>
+
+<ParamField body="defaultHeaders" type="Record<string, string>" optional>
+  Custom HTTP headers forwarded with every API request. Useful for request tracing.
+
+  ```typescript
+  const composio = new Composio({
+    defaultHeaders: { 'x-request-id': '1234567890' },
+  });
+  ```
+</ParamField>
+
+<ParamField body="disableVersionCheck" type="boolean" optional>
+  Skip the npm version-freshness check on startup. Defaults to `false`.
+</ParamField>
+
+---
+
+## Instance Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `composio.tools` | `Tools` | Fetch, search, and execute tools. [→ Tools reference](/reference/ts/tools) |
+| `composio.toolkits` | `Toolkits` | Retrieve toolkit metadata and authorise user connections |
+| `composio.triggers` | `Triggers` | Manage webhook triggers and event subscriptions |
+| `composio.authConfigs` | `AuthConfigs` | Manage authentication configurations for toolkits |
+| `composio.connectedAccounts` | `ConnectedAccounts` | List and manage authenticated connections |
+| `composio.mcp` | `MCP` | Create and manage persistent MCP server configurations. [→ MCP reference](/reference/ts/mcp) |
+| `composio.files` | `Files` | Upload and download files |
+| `composio.experimental` | `Experimental` | Experimental SDK methods whose shape may change |
+
+---
+
+## Methods
+
+### `composio.create()`
+
+Creates a new Tool Router session for a user. Returns a `ToolRouterSession` containing provider-wrapped tools, an MCP endpoint, and helpers for authorization and search.
+
+```typescript
+const session = await composio.create(userId, config?)
+```
+
+<ParamField body="userId" type="string" required>
+  Your application's stable identifier for the end user (e.g. a database primary key or UUID).
+</ParamField>
+
+<ParamField body="config" type="ToolRouterCreateSessionConfig" optional>
+  Session configuration. See the [ToolRouterSession reference](/reference/ts/tool-router) for the full config shape.
+</ParamField>
+
+**Returns:** `Promise<ToolRouterSession>`
+
+```typescript
+const session = await composio.create('user_123', {
+  toolkits: ['github', 'slack'],
+  manageConnections: true,
+});
+
+console.log(session.sessionId);
+console.log(session.mcp.url);
+
+const tools = await session.tools();
+```
+
+---
+
+### `composio.use()`
+
+Re-attaches to an existing Tool Router session by its ID. Useful when a session was created in a previous request and you want to continue using it.
+
+```typescript
+const session = await composio.use(sessionId, options?)
+```
+
+<ParamField body="sessionId" type="string" required>
+  The session ID returned by a previous `composio.create()` call.
+</ParamField>
+
+<ParamField body="options" type="object" optional>
+  <Expandable title="options">
+    <ParamField body="customTools" type="CustomTool[]" optional>
+      Local custom tool definitions to bind into the session.
+    </ParamField>
+    <ParamField body="customToolkits" type="CustomToolkit[]" optional>
+      Local custom toolkit definitions to bind into the session.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<ToolRouterSession>`
+
+```typescript
+const session = await composio.use('session_abc123');
+const results = await session.execute('GITHUB_CREATE_ISSUE', {
+  owner: 'composiohq',
+  repo:  'composio',
+  title: 'Bug: something went wrong',
+});
+```
+
+---
+
+### `composio.getClient()`
+
+Returns the underlying `ComposioClient` instance for low-level API access.
+
+```typescript
+const client = composio.getClient();
+```
+
+**Returns:** `ComposioClient`
+
+---
+
+### `composio.getConfig()`
+
+Returns a frozen, shallow clone of the configuration the SDK was initialised with. Mutations on the returned object have no effect.
+
+```typescript
+const config = composio.getConfig();
+console.log(config.baseURL);
+```
+
+**Returns:** `Readonly<ComposioConfig>`
+
+---
+
+### `composio.flush()`
+
+Flushes any pending telemetry and waits for it to complete. In Node.js environments telemetry is flushed automatically on process exit. In runtimes without `process` events (e.g. Cloudflare Workers) you should call this manually.
+
+```typescript
+await composio.flush();
+```
+
+**Returns:** `Promise<void>`
+
+```typescript
+// Cloudflare Workers example
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const composio = new Composio({ apiKey: env.COMPOSIO_API_KEY });
+
+    const session = await composio.create(env.USER_ID);
+    const tools   = await session.tools();
+
+    // ... run agent ...
+
+    ctx.waitUntil(composio.flush());
+    return new Response('OK');
+  },
+};
+```
+
+---
+
+## Full Usage Example
+
+```typescript
+import { Composio } from '@composio/core';
+import OpenAI from 'openai';
+
+const composio = new Composio({
+  apiKey: process.env.COMPOSIO_API_KEY,
+  toolkitVersions: { github: '20250909_00' },
+});
+
+const openai = new OpenAI();
+
+async function runAgent(userId: string) {
+  // 1. Create a session scoped to the user
+  const session = await composio.create(userId, {
+    toolkits: ['github'],
+    manageConnections: true,
+  });
+
+  // 2. Get framework-formatted tools
+  const tools = await session.tools();
+
+  // 3. Run the LLM with Composio tools
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: 'user', content: 'List my open GitHub issues.' },
+  ];
+
+  let response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages,
+    tools,
+  });
+
+  // 4. Handle tool calls in a loop
+  while (response.choices[0].finish_reason === 'tool_calls') {
+    const toolCall = response.choices[0].message.tool_calls![0];
+    const result   = await session.execute(
+      toolCall.function.name,
+      JSON.parse(toolCall.function.arguments)
+    );
+
+    messages.push(response.choices[0].message);
+    messages.push({
+      role:         'tool',
+      tool_call_id: toolCall.id,
+      content:      JSON.stringify(result.data),
+    });
+
+    response = await openai.chat.completions.create({ model: 'gpt-4o', messages, tools });
+  }
+
+  console.log(response.choices[0].message.content);
+}
+
+runAgent('user_123');
+```

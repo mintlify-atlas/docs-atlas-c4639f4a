@@ -1,0 +1,469 @@
+---
+title: 'ToolRouterSession - TypeScript SDK Reference'
+description: 'Reference for the ToolRouterSession class returned by composio.create(). Methods for tools, authorize, search, execute, MCP, and file management.'
+---
+
+`ToolRouterSession` is the stateful session object returned by `composio.create()` and `composio.use()`. It encapsulates a server-side session that routes tool calls to the right connected accounts, exposes an MCP streaming endpoint, and provides helpers for authorization, search, and execution.
+
+## Obtaining a Session
+
+```typescript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+// Create a new session
+const session = await composio.create('user_123', {
+  toolkits: ['github', 'slack'],
+  manageConnections: true,
+});
+
+// Or re-attach to an existing session
+const existingSession = await composio.use('session_abc123');
+```
+
+---
+
+## Session Creation Config
+
+Pass this object as the second argument to `composio.create()` to configure the session.
+
+<ParamField body="toolkits" type="string[] | { enable: string[] } | { disable: string[] }" optional>
+  Toolkits to make available in the session.
+
+  ```typescript
+  // Enable specific toolkits
+  { toolkits: ['github', 'slack'] }
+
+  // Disable specific toolkits from the user's defaults
+  { toolkits: { disable: ['linear'] } }
+  ```
+</ParamField>
+
+<ParamField body="tools" type="Record<string, string[] | ToolConfig>" optional>
+  Fine-grained tool control per toolkit. The key is the toolkit slug; the value is either an array of allowed tool slugs, or an object with `enable`, `disable`, or `tags`.
+
+  ```typescript
+  {
+    tools: {
+      github: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS'],
+      slack:  { disable: ['SLACK_DELETE_MESSAGE'] },
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField body="tags" type="ToolRouterTag[] | { enable: ToolRouterTag[], disable: ToolRouterTag[] }" optional>
+  Filter tools by MCP capability hints. Valid tags: `'readOnlyHint'`, `'destructiveHint'`, `'idempotentHint'`, `'openWorldHint'`.
+</ParamField>
+
+<ParamField body="manageConnections" type="boolean | { enable: boolean, callbackUrl: string, waitForConnections: boolean }" optional>
+  When `true` (or `{ enable: true }`), Composio injects connection-management meta-tools (search, link, wait) into the session so the agent can guide users through OAuth flows.
+
+  ```typescript
+  {
+    manageConnections: {
+      enable:             true,
+      callbackUrl:        'https://myapp.com/oauth/callback',
+      waitForConnections: true,
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField body="workbench" type="{ enable: boolean, sandboxSize: SandboxSize }" optional>
+  Enable the Composio workbench (an isolated sandbox for code execution). `sandboxSize` accepts `'standard'` (1 vCPU / 1 GB), `'medium'` (2 vCPU / 2 GB), `'large'` (4 vCPU / 4 GB), or `'xlarge'` (8 vCPU / 8 GB).
+</ParamField>
+
+<ParamField body="preload" type="{ tools: string[] | 'all' }" optional>
+  Pre-fetch tool schemas at session creation time so `session.tools()` returns immediately. Use `'all'` to preload every allowed tool.
+
+  ```typescript
+  { preload: { tools: ['GITHUB_CREATE_ISSUE', 'SLACK_SEND_MESSAGE'] } }
+  { preload: { tools: 'all' } }
+  ```
+</ParamField>
+
+<ParamField body="sessionPreset" type="'direct_tools'" optional>
+  Shortcut to expose every allowed tool directly in `session.tools()` without meta/helper tools (search, multi-execute, manage-connections, workbench). Use when all tools are known upfront.
+
+  ```typescript
+  { sessionPreset: 'direct_tools' }
+  ```
+</ParamField>
+
+---
+
+## Session Properties
+
+<ResponseField name="sessionId" type="string">
+  Stable identifier for this session. Pass to `composio.use()` to re-attach.
+</ResponseField>
+
+<ResponseField name="mcp.url" type="string">
+  Streaming HTTP endpoint for the session's MCP server. Compatible with any MCP client.
+</ResponseField>
+
+<ResponseField name="mcp.headers" type="Record<string, string>">
+  Auth headers required by the MCP endpoint.
+</ResponseField>
+
+<ResponseField name="preload" type="ToolRouterSessionPreloadConfig">
+  The preload configuration active for this session.
+</ResponseField>
+
+<ResponseField name="configVersion" type="number | undefined">
+  Server-side config version at creation time.
+</ResponseField>
+
+<ResponseField name="warnings" type="ToolRouterSessionWarning[]">
+  Non-blocking warnings returned by the API at session creation.
+</ResponseField>
+
+<ResponseField name="experimental.assistivePrompt" type="string | undefined">
+  System-prompt snippet to inject into your agent for optimal tool-router usage. Only present on freshly created sessions.
+</ResponseField>
+
+<ResponseField name="experimental.files" type="ToolRouterSessionFilesMount">
+  File-mount operations (list, upload, download, delete) for the session's virtual filesystem.
+</ResponseField>
+
+---
+
+## Methods
+
+### `session.tools()`
+
+Returns tools available in this session, wrapped in the format expected by the configured provider.
+
+```typescript
+const tools = await session.tools(modifiers?)
+```
+
+<ParamField body="modifiers" type="SessionMetaToolOptions" optional>
+  <Expandable title="SessionMetaToolOptions">
+    <ParamField body="modifySchema" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, schema }) => Tool` — Transform each tool schema before wrapping.
+    </ParamField>
+    <ParamField body="beforeExecute" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, sessionId, params }) => Record<string,unknown>` — Mutate tool arguments before they are sent.
+    </ParamField>
+    <ParamField body="afterExecute" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, sessionId, result }) => ToolExecuteResponse` — Transform the result before it is returned.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<TToolCollection>` — provider-specific format (e.g. `OpenAI.ChatCompletionTool[]`)
+
+```typescript
+const tools = await session.tools();
+// Pass directly to your LLM provider
+```
+
+---
+
+### `session.search()`
+
+Semantically searches for tools relevant to a natural-language use-case description.
+
+```typescript
+const results = await session.search({ query, toolkits? })
+```
+
+<ParamField body="query" type="string" required>
+  The natural-language use case, e.g. `'create a GitHub issue'`.
+</ParamField>
+
+<ParamField body="toolkits" type="string[]" optional>
+  Restrict search to specific toolkit slugs.
+</ParamField>
+
+**Returns:** `Promise<ToolRouterSessionSearchResponse>`
+
+```typescript
+const results = await session.search({
+  query:    'send a Slack message to a channel',
+  toolkits: ['slack'],
+});
+
+console.log(results.tools.map(t => t.slug));
+```
+
+---
+
+### `session.execute()`
+
+Executes a tool within the session. Composio resolves the connected account for the user automatically.
+
+```typescript
+const result = await session.execute(toolSlug, arguments_?, options?)
+```
+
+<ParamField body="toolSlug" type="string" required>
+  The tool slug to execute (e.g. `'GITHUB_CREATE_ISSUE'`).
+</ParamField>
+
+<ParamField body="arguments_" type="Record<string, unknown>" optional>
+  Tool input arguments matching the tool's schema.
+</ParamField>
+
+<ParamField body="options" type="ToolRouterSessionExecuteOptions" optional>
+  <Expandable title="ToolRouterSessionExecuteOptions">
+    <ParamField body="account" type="string" optional>
+      Account identifier for direct app tool execution in multi-account sessions.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<ToolRouterSessionExecuteResponse>`
+
+<ResponseField name="data" type="Record<string, unknown>">
+  Structured output from the tool.
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message on failure; `null` on success.
+</ResponseField>
+
+<ResponseField name="logId" type="string">
+  Composio log ID for this execution.
+</ResponseField>
+
+```typescript
+const result = await session.execute('GITHUB_CREATE_ISSUE', {
+  owner: 'composiohq',
+  repo:  'composio',
+  title: 'Automated issue',
+});
+
+console.log(result.data);
+```
+
+---
+
+### `session.authorize()`
+
+Initiates an OAuth/authentication flow for a toolkit and returns a connection request with a redirect URL.
+
+```typescript
+const connectionRequest = await session.authorize(toolkit, options?)
+```
+
+<ParamField body="toolkit" type="string" required>
+  The toolkit slug to authorize (e.g. `'github'`, `'slack'`).
+</ParamField>
+
+<ParamField body="options" type="object" optional>
+  <Expandable title="options">
+    <ParamField body="callbackUrl" type="string" optional>
+      URL to redirect the user to after completing the OAuth flow.
+    </ParamField>
+    <ParamField body="alias" type="string" optional>
+      Human-readable alias for the connection.
+    </ParamField>
+    <ParamField body="experimental.accountType" type="'PRIVATE' | 'SHARED'" optional>
+      Create a `SHARED` connection with a per-user ACL instead of a private one.
+    </ParamField>
+    <ParamField body="experimental.aclConfigForShared" type="ConnectedAccountAclConfig" optional>
+      ACL configuration for shared connections (up to 1 000 entries per list).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<ConnectionRequest>`
+
+<ResponseField name="redirectUrl" type="string">
+  URL to redirect your user to in order to complete the OAuth flow.
+</ResponseField>
+
+<ResponseField name="connectedAccountId" type="string">
+  The ID of the connection being established.
+</ResponseField>
+
+```typescript
+const connectionRequest = await session.authorize('github', {
+  callbackUrl: 'https://myapp.com/oauth/callback',
+});
+
+// Redirect the user
+window.location.href = connectionRequest.redirectUrl;
+```
+
+---
+
+### `session.toolkits()`
+
+Lists toolkits in the session along with their connection status.
+
+```typescript
+const result = await session.toolkits(options?)
+```
+
+<ParamField body="options" type="ToolRouterToolkitsOptions" optional>
+  <Expandable title="ToolRouterToolkitsOptions">
+    <ParamField body="cursor" type="string" optional>
+      Pagination cursor from a previous response.
+    </ParamField>
+    <ParamField body="limit" type="number" optional>
+      Maximum items per page.
+    </ParamField>
+    <ParamField body="toolkits" type="string[]" optional>
+      Filter by toolkit slugs.
+    </ParamField>
+    <ParamField body="isConnected" type="boolean" optional>
+      Return only connected (`true`) or disconnected (`false`) toolkits.
+    </ParamField>
+    <ParamField body="search" type="string" optional>
+      Filter toolkits by name.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<{ items: ToolkitConnectionState[], cursor?: string, totalPages: number }>`
+
+<ResponseField name="items[].slug" type="string">
+  Toolkit slug.
+</ResponseField>
+
+<ResponseField name="items[].name" type="string">
+  Toolkit display name.
+</ResponseField>
+
+<ResponseField name="items[].isNoAuth" type="boolean">
+  `true` if the toolkit requires no authentication.
+</ResponseField>
+
+<ResponseField name="items[].connection.isActive" type="boolean">
+  Whether the user's connection is currently active.
+</ResponseField>
+
+```typescript
+const { items } = await session.toolkits({ isConnected: true });
+items.forEach(tk => console.log(tk.slug, tk.connection?.isActive));
+```
+
+---
+
+### `session.update()`
+
+Partially updates the session configuration in-place. Only the fields you provide are changed; omitted fields retain their current values. Also updates `session.configVersion`, `session.preload`, and `session.warnings`.
+
+```typescript
+await session.update(config)
+```
+
+<ParamField body="config" type="ToolRouterUpdateSessionConfig" required>
+  Partial session configuration. Accepts the same fields as the session creation config: `toolkits`, `tools`, `tags`, `manageConnections`, `workbench`, `preload`, `authConfigs`, `connectedAccounts`, and `multiAccount`.
+</ParamField>
+
+**Returns:** `Promise<void>`
+
+```typescript
+// Add a toolkit to the session
+await session.update({ toolkits: { enable: ['notion'] } });
+
+// Preload all tools for the next session.tools() call
+await session.update({ preload: { tools: 'all' } });
+```
+
+---
+
+### `session.proxyExecute()`
+
+Proxies a raw HTTP request to a toolkit's API through Composio's auth layer without calling a named tool.
+
+```typescript
+const response = await session.proxyExecute(params)
+```
+
+<ParamField body="params.toolkit" type="string" required>
+  Toolkit slug whose connected account provides auth (e.g. `'github'`).
+</ParamField>
+
+<ParamField body="params.endpoint" type="string" required>
+  API endpoint URL.
+</ParamField>
+
+<ParamField body="params.method" type="'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'" required>
+  HTTP method.
+</ParamField>
+
+<ParamField body="params.body" type="unknown" optional>
+  Request body for write methods.
+</ParamField>
+
+<ParamField body="params.parameters" type="array" optional>
+  Query params or headers as `{ in: 'query'|'header', name: string, value: string|number }` objects.
+</ParamField>
+
+**Returns:** `Promise<ToolRouterSessionProxyExecuteResponse>`
+
+---
+
+## Full Lifecycle Example
+
+```typescript
+import { Composio } from '@composio/core';
+import OpenAI from 'openai';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+const openai   = new OpenAI();
+
+async function agentLoop(userId: string) {
+  // 1. Create a session
+  const session = await composio.create(userId, {
+    toolkits:          ['github', 'slack'],
+    manageConnections: true,
+    preload:           { tools: 'all' },
+  });
+
+  console.log('Session ID:', session.sessionId);
+  console.log('MCP URL:',    session.mcp.url);
+
+  // 2. Check toolkit connections
+  const { items } = await session.toolkits();
+  for (const tk of items) {
+    if (!tk.isNoAuth && !tk.connection?.isActive) {
+      // Guide user through auth
+      const req = await session.authorize(tk.slug, {
+        callbackUrl: 'https://myapp.com/callback',
+      });
+      console.log(`Connect ${tk.slug}: ${req.redirectUrl}`);
+    }
+  }
+
+  // 3. Get tools and run the agent
+  const tools    = await session.tools();
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: 'user', content: 'Create a GitHub issue about our API bug.' },
+  ];
+
+  let response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages,
+    tools,
+  });
+
+  while (response.choices[0].finish_reason === 'tool_calls') {
+    const tc     = response.choices[0].message.tool_calls![0];
+    const result = await session.execute(
+      tc.function.name,
+      JSON.parse(tc.function.arguments)
+    );
+
+    messages.push(response.choices[0].message);
+    messages.push({
+      role:         'tool',
+      tool_call_id: tc.id,
+      content:      JSON.stringify(result.data),
+    });
+
+    response = await openai.chat.completions.create({ model: 'gpt-4o', messages, tools });
+  }
+
+  console.log(response.choices[0].message.content);
+}
+
+agentLoop('user_123');
+```

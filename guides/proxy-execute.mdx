@@ -1,0 +1,155 @@
+---
+title: 'Proxy Execution: Authenticated HTTP Requests'
+description: 'Make arbitrary HTTP requests through a connected account credentials without a predefined tool. Useful for API endpoints not yet covered by Composio tool catalog.'
+---
+
+Proxy execution lets you call any HTTP endpoint on a third-party API (GitHub, Slack, Google, etc.) using a user's connected account credentials — without needing a predefined Composio tool for that specific endpoint. Composio injects the correct authentication headers automatically, so you never handle tokens or OAuth flows yourself.
+
+## When to use proxy execution
+
+Proxy execution is the right choice when:
+
+- You need to call an API endpoint that isn't covered by the Composio tool catalog yet
+- You're working with beta or private API features not yet wrapped as a Composio tool
+- You need full control over the HTTP request (custom headers, non-standard payloads)
+- You want to use Composio's auth layer for an endpoint your team maintains internally
+
+## Making a proxy request
+
+Pass the `endpoint`, `method`, request `body`, and the `connectedAccountId` that provides authentication. Composio resolves the base URL for the connected service and injects credentials before forwarding the request.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+import { OpenAIProvider } from '@composio/openai';
+
+const composio = new Composio({
+  apiKey: process.env.COMPOSIO_API_KEY,
+  provider: new OpenAIProvider(),
+});
+
+const response = await composio.tools.proxyExecute({
+  endpoint: '/repos/my-org/my-repo/issues',
+  method: 'POST',
+  body: {
+    title: 'Automated issue from proxy',
+    body: 'Created via Composio proxy execution.',
+    labels: ['automation'],
+  },
+  connectedAccountId: 'ca_abc123',
+});
+
+console.log(response.data);       // GitHub API response body
+console.log(response.successful); // true
+```
+
+```python Python
+from composio import Composio
+
+composio = Composio()
+
+response = composio.tools.proxy(
+    endpoint="/repos/my-org/my-repo/issues",
+    method="POST",
+    body={
+        "title": "Automated issue from proxy",
+        "body": "Created via Composio proxy execution.",
+        "labels": ["automation"],
+    },
+    connected_account_id="ca_abc123",
+)
+
+print(response.data)       # GitHub API response body
+print(response.successful) # True
+```
+</CodeGroup>
+
+## ToolProxyResponse structure
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | `dict` | The raw response body from the upstream API. |
+| `error` | `string \| null` | Error message if the request failed; `null` on success. |
+| `successful` | `boolean` | `true` if the upstream API returned a 2xx status. |
+
+## How it works
+
+When you call `proxyExecute` / `proxy`, Composio:
+
+<Steps>
+  <Step title="Looks up the connected account">
+    Composio retrieves the stored credentials for the `connectedAccountId` you provided — no token handling on your side.
+  </Step>
+  <Step title="Resolves the base URL">
+    The base URL for the connected service (e.g. `https://api.github.com`) is automatically prepended to your `endpoint`.
+  </Step>
+  <Step title="Injects authentication headers">
+    Composio adds the appropriate `Authorization`, `Bearer`, or OAuth signature headers required by the service.
+  </Step>
+  <Step title="Forwards the request and returns the response">
+    The HTTP request is forwarded to the third-party API. The raw response body is returned to you as `data`.
+  </Step>
+</Steps>
+
+## GitHub API example
+
+Here is a complete example that lists open pull requests for a repository using proxy execution:
+
+<CodeGroup>
+```typescript TypeScript
+const prs = await composio.tools.proxyExecute({
+  endpoint: '/repos/my-org/my-repo/pulls?state=open&per_page=10',
+  method: 'GET',
+  connectedAccountId: 'ca_abc123',
+});
+
+if (prs.successful) {
+  const pullRequests = prs.data as Array<{ number: number; title: string }>;
+  pullRequests.forEach(pr => console.log(`#${pr.number}: ${pr.title}`));
+}
+```
+
+```python Python
+prs = composio.tools.proxy(
+    endpoint="/repos/my-org/my-repo/pulls?state=open&per_page=10",
+    method="GET",
+    connected_account_id="ca_abc123",
+)
+
+if prs.successful:
+    for pr in prs.data:
+        print(f"#{pr['number']}: {pr['title']}")
+```
+</CodeGroup>
+
+## Getting the connected account ID
+
+You need a valid `connectedAccountId` to make proxy requests. Retrieve it from the connected accounts list for a given user:
+
+<CodeGroup>
+```typescript TypeScript
+const accounts = await composio.connectedAccounts.list({
+  userId: 'user_123',
+  toolkitSlug: 'github',
+});
+
+const connectedAccountId = accounts.items[0]?.id;
+```
+
+```python Python
+accounts = composio.connected_accounts.list(
+    user_id="user_123",
+    toolkit_slug="github",
+)
+
+connected_account_id = accounts.items[0].id if accounts.items else None
+```
+</CodeGroup>
+
+<Note>
+  You can also find `connectedAccountId` values in the [Composio dashboard](https://app.composio.dev) under **Connected Accounts**, or by running `composio connected-accounts list` in the CLI.
+</Note>
+
+<Tip>
+  When using sessions, proxy execution is available directly on the session object and routes automatically through the session's connected accounts — no need to specify `connectedAccountId` manually. See the [Sessions Overview](/sessions/overview) for details.
+</Tip>

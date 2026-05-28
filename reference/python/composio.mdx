@@ -1,0 +1,144 @@
+---
+title: 'Composio Class - Python SDK Reference'
+description: 'Full reference for the Composio Python SDK main class. Constructor options, instance attributes, and top-level methods for sessions, tools, triggers, and auth.'
+---
+
+The `Composio` class is the top-level entry point for the Python SDK. It wires together tools, triggers, auth configs, connected accounts, MCP, and the tool router into a single typed client. The class is generic over `TTool` and `TToolCollection`, which are inferred automatically from the provider you pass in — no manual type annotations needed.
+
+## Installation
+
+```bash
+pip install composio
+```
+
+## Import
+
+```python
+from composio import Composio
+```
+
+## Constructor
+
+```python
+Composio(provider=None, **kwargs)
+```
+
+Instantiate the SDK. The `COMPOSIO_API_KEY` environment variable is read automatically when `api_key` is not supplied explicitly.
+
+### Parameters
+
+<ParamField path="api_key" type="str">
+  Your Composio API key. Defaults to the `COMPOSIO_API_KEY` environment variable. Raises `ApiKeyNotProvidedError` when neither is set.
+</ParamField>
+
+<ParamField path="provider" type="BaseProvider" default="OpenAIProvider()">
+  The provider adapter that controls how Composio tools are wrapped for your AI framework. Defaults to `OpenAIProvider`, which returns `list[ChatCompletionToolParam]`. Pass any provider from `composio-openai`, `composio-anthropic`, `composio-langchain`, etc.
+
+  ```python
+  from composio import Composio
+  from composio_anthropic import AnthropicProvider
+
+  composio = Composio(provider=AnthropicProvider())
+  ```
+</ParamField>
+
+<ParamField path="environment" type="str" default="production">
+  API environment to connect to. Accepted values: `"production"`, `"staging"`, `"local"`.
+</ParamField>
+
+<ParamField path="timeout" type="int" default="30">
+  Per-request timeout in seconds for HTTP calls to the Composio API.
+</ParamField>
+
+<ParamField path="max_retries" type="int" default="3">
+  Maximum number of automatic retries on transient network errors.
+</ParamField>
+
+<ParamField path="toolkit_versions" type="Dict[str, str]">
+  Pin specific toolkit versions. Accepts:
+  - A `dict` mapping toolkit slug → version string (e.g. `{"github": "20250906_01"}`).
+  - A single version string applied to all toolkits (e.g. `"latest"`, `"20250906_01"`).
+  - `None` (default) — uses `"latest"` for every toolkit.
+
+  ```python
+  composio = Composio(toolkit_versions={"github": "20250906_01", "gmail": "latest"})
+  ```
+</ParamField>
+
+<ParamField path="dangerously_allow_auto_upload_download_files" type="bool" default="false">
+  Opt-in to automatic file upload and download during tool execution. When `True`, local file paths detected in tool arguments are uploaded to Composio's file service before execution, and file URLs in responses are downloaded automatically.
+
+  <Warning>
+    This option trusts tool arguments to contain safe paths. Always combine with `file_upload_dirs` to restrict which directories can be read.
+  </Warning>
+</ParamField>
+
+<ParamField path="sensitive_file_upload_protection" type="bool" default="true">
+  When `True`, local paths that match the built-in sensitive-path denylist (e.g. `~/.ssh`, `/etc/passwd`) are blocked before upload even if `dangerously_allow_auto_upload_download_files` is enabled.
+</ParamField>
+
+<ParamField path="file_upload_dirs" type="List[str]">
+  Allowlist of directories from which the SDK may read local files during automatic file upload. Only consulted when `dangerously_allow_auto_upload_download_files=True`.
+
+  - `None` (default) → `[~/.composio/temp]`
+  - `False` → reject every local path; only URLs and in-memory bytes are accepted
+  - `["path/a", "path/b"]` → only files inside these directories are allowed (evaluated on a path-component boundary)
+
+  Providing a value **replaces** the default entirely. Include `~/.composio/temp` explicitly if you want the default staging dir to remain active.
+</ParamField>
+
+## Instance Attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `composio.tools` | `Tools[TTool, TToolCollection]` | Fetch, search, execute, and proxy tool calls. |
+| `composio.tool_router` | `ToolRouter[TTool, TToolCollection]` | Manage user sessions with smart tool routing and MCP. |
+| `composio.create` | alias for `tool_router.create` | Create a new `ToolRouterSession`. |
+| `composio.use` | alias for `tool_router.use` | Resume an existing `ToolRouterSession`. |
+| `composio.toolkits` | `Toolkits` | Browse and inspect toolkit metadata. |
+| `composio.triggers` | `Triggers` | Create, list, enable/disable, and subscribe to triggers. |
+| `composio.auth_configs` | `AuthConfigs` | Manage OAuth app configurations. |
+| `composio.connected_accounts` | `ConnectedAccounts` | Manage per-user connected accounts. |
+| `composio.mcp` | `MCP` | Access MCP server URLs for direct framework integration. |
+| `composio.experimental` | `ExperimentalAPI` | Experimental decorators and SDK methods (custom tools, ACL, etc.). |
+| `composio.client` | `HttpClient` | Low-level HTTP client for direct API access. |
+
+## Usage Example
+
+```python
+import os
+from composio import Composio
+from composio_openai import OpenAIProvider
+from openai import OpenAI
+
+# Initialize with OpenAI provider (default)
+composio = Composio(
+    api_key=os.environ["COMPOSIO_API_KEY"],
+    provider=OpenAIProvider(),
+    toolkit_versions={"github": "20250906_01"},
+)
+
+openai_client = OpenAI()
+
+# Fetch tools for a user
+tools = composio.tools.get(
+    user_id="user_alice",
+    toolkits=["github"],
+)
+
+response = openai_client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Star the composio repo on GitHub"}],
+    tools=tools,
+)
+
+# Execute any tool calls the model requested
+composio.provider.handle_tool_calls(
+    user_id="user_alice",
+    response=response,
+)
+```
+
+<Note>
+  The generic type parameters `TTool` and `TToolCollection` are inferred from the `provider` argument. You never need to annotate them explicitly. When no provider is passed, the SDK defaults to `OpenAIProvider` and the types resolve to `OpenAITool` / `list[OpenAITool]`.
+</Note>

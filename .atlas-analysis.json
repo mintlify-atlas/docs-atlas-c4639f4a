@@ -1,0 +1,144 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Composio",
+  "projectDescription": "Composio is a TypeScript and Python SDK that gives AI agents access to 1,000+ external tool integrations with built-in authentication, per-user sessions, triggers, MCP support, and adapters for every major AI framework.",
+  "theme": "luma",
+  "primaryColor": "#040404",
+  "lightColor": "#848484",
+  "darkColor": "#e8e8e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "how-it-works"
+            ]
+          },
+          {
+            "group": "Sessions & Tools",
+            "pages": [
+              "sessions/overview",
+              "sessions/configuring-sessions",
+              "sessions/tools-and-toolkits",
+              "sessions/modifiers",
+              "sessions/workbench"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "authentication/overview",
+              "authentication/connected-accounts",
+              "authentication/auth-configs",
+              "authentication/white-labeling"
+            ]
+          },
+          {
+            "group": "Triggers",
+            "pages": [
+              "triggers/overview",
+              "triggers/managing-triggers",
+              "triggers/webhook-verification"
+            ]
+          },
+          {
+            "group": "MCP & Integrations",
+            "pages": [
+              "mcp/overview",
+              "mcp/mcp-server",
+              "providers/overview"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/custom-tools",
+              "guides/direct-execution",
+              "guides/proxy-execute",
+              "guides/cli",
+              "guides/migration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "reference/ts/composio",
+              "reference/ts/tools",
+              "reference/ts/tool-router",
+              "reference/ts/mcp",
+              "reference/ts/providers"
+            ]
+          },
+          {
+            "group": "Python SDK",
+            "pages": [
+              "reference/python/composio",
+              "reference/python/tools",
+              "reference/python/tool-router",
+              "reference/python/triggers",
+              "reference/python/providers"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "reference/cli/overview",
+              "reference/cli/commands"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "1,000+ pre-built tool integrations (GitHub, Slack, Gmail, Notion, etc.)",
+    "Session-based tool routing with per-user isolation",
+    "Built-in OAuth and API key authentication management",
+    "Model Context Protocol (MCP) server support",
+    "Adapters for 12+ AI frameworks: OpenAI, Anthropic, LangChain, CrewAI, Vercel, Mastra, and more",
+    "Real-time triggers via webhooks and polling",
+    "Persistent Python sandbox (Workbench) for code execution",
+    "Custom tool and toolkit creation",
+    "Modifier middleware for schema, input, and output transformation",
+    "Proxy execution for direct authenticated HTTP requests",
+    "CLI for managing tools, connections, and code generation"
+  ],
+  "publicApiSurface": [
+    "Composio({ apiKey, provider, baseURL, toolkitVersions, ... })",
+    "composio.tools.get(userId, { toolkits, tools, search, limit })",
+    "composio.tools.execute(slug, arguments, { userId, modifiers })",
+    "composio.create(userId, sessionConfig) → ToolRouterSession",
+    "composio.use(sessionId) → ToolRouterSession",
+    "session.tools(modifiers?) → ProviderToolCollection",
+    "session.authorize(toolkit, ...) → ConnectLink",
+    "session.mcp.url / session.mcp.headers",
+    "composio.triggers.subscribe() → TriggerSubscription",
+    "composio.triggers.verify_webhook(id, payload, secret, signature, timestamp)",
+    "composio.mcp.create(name, config) → MCPServer",
+    "composio.mcp.generate(userId, mcpConfigId) → MCPServerInstance",
+    "composio.connectedAccounts.link(userId, authConfigId) → ConnectionRequest",
+    "composio.authConfigs.create(toolkit, options)",
+    "composio.experimental.tool() decorator",
+    "@composio/core: Composio, Tools, MCP, RemoteFile, ToolRouterSession",
+    "@composio/openai: OpenAIProvider, OpenAIResponsesProvider",
+    "@composio/anthropic: AnthropicProvider",
+    "@composio/langchain: LangchainProvider",
+    "@composio/vercel: VercelProvider",
+    "@composio/google: GoogleProvider",
+    "@composio/mastra: MastraProvider",
+    "@composio/openai-agents: OpenAIAgentsProvider",
+    "@composio/cloudflare: CloudflareProvider",
+    "@composio/llamaindex: LlamaindexProvider",
+    "composio CLI: login, tools list/search/execute, triggers, connected-accounts, generate ts/py, mcp"
+  ]
+}

@@ -1,0 +1,200 @@
+---
+title: 'Composio CLI Reference and Usage'
+description: 'The Composio CLI manages tool connections, searches integrations, generates typed code, and runs MCP servers from the terminal. Install with npm or the install script.'
+---
+
+The Composio CLI is a terminal companion for your Composio project. Use it to authenticate, explore the tool catalog, link user accounts to third-party services, manage triggers, generate typed stubs for TypeScript and Python, and inspect logs — all without leaving your terminal.
+
+## Installation
+
+<CodeGroup>
+```bash npm / pnpm / yarn
+# npm
+npm install -g @composio/cli
+
+# pnpm
+pnpm add -g @composio/cli
+
+# yarn
+yarn global add @composio/cli
+```
+
+```bash curl install script
+curl -fsSL https://raw.githubusercontent.com/ComposioHQ/composio/main/install.sh | bash
+```
+</CodeGroup>
+
+After installation, verify the CLI is available:
+
+```bash
+composio --version
+composio --help
+```
+
+<Tip>
+  Every command and subcommand supports a `--help` flag that prints usage, available options, and examples. For example: `composio tools list --help`.
+</Tip>
+
+---
+
+## Account
+
+Manage your Composio account and authentication from the CLI.
+
+| Command | Description |
+|---------|-------------|
+| `composio login` | Open a browser to authenticate and store your API key locally |
+| `composio login --no-browser` | Authenticate without opening a browser (prints a URL to visit manually) |
+| `composio logout` | Remove stored credentials |
+| `composio whoami` | Display the currently authenticated user and active organization |
+| `composio signup` | Create a new Composio account |
+
+```bash
+composio login
+composio whoami
+```
+
+---
+
+## Tools
+
+Browse and inspect individual tools before running them.
+
+| Command | Description |
+|---------|-------------|
+| `composio tools list <toolkit>` | List all tools in a toolkit |
+| `composio tools list <toolkit> --query <text>` | Filter tools by name, slug, or description |
+| `composio tools list <toolkit> --tags <tag>` | Filter tools by tag (e.g. `important`) |
+| `composio tools info <slug>` | Show full schema and description for a specific tool |
+
+```bash
+composio tools list github
+composio tools list gmail --query "send email" --limit 5
+composio tools info GITHUB_CREATE_ISSUE
+```
+
+---
+
+## Toolkits
+
+Explore available Composio toolkits and their metadata.
+
+| Command | Description |
+|---------|-------------|
+| `composio toolkits list` | List all available toolkits |
+| `composio toolkits list --query <text>` | Search toolkits by name, slug, or description |
+| `composio toolkits list --connected` | Show only toolkits the current user has connected |
+| `composio toolkits info <slug>` | Show toolkit details including supported auth schemes |
+| `composio toolkits search <query>` | Shorthand full-text search across all toolkits |
+
+```bash
+composio toolkits list
+composio toolkits list --connected --user-id user_123
+composio toolkits info github
+```
+
+---
+
+## Connected Accounts
+
+Manage connections between your users and third-party services.
+
+| Command | Description |
+|---------|-------------|
+| `composio connected-accounts list` | List all connected accounts |
+| `composio connected-accounts list --user-id <id>` | Filter by user ID |
+| `composio connected-accounts list --toolkits <slug>` | Filter by toolkit slug |
+| `composio connected-accounts info <id>` | Show details for a specific connected account |
+| `composio connected-accounts link <toolkit>` | Start an OAuth or API-key flow to link a new account |
+| `composio connected-accounts whoami <id>` | Fetch identity info from the connected service |
+
+```bash
+composio connected-accounts list --user-id user_123
+composio connected-accounts link github
+composio connected-accounts info ca_abc123
+composio connected-accounts whoami ca_abc123
+```
+
+---
+
+## Triggers
+
+Inspect and manage event-driven triggers that fire webhooks into your application.
+
+| Command | Description |
+|---------|-------------|
+| `composio triggers list` | List all available trigger types |
+| `composio triggers info <slug>` | Show schema and config for a specific trigger |
+| `composio triggers create <slug>` | Create a trigger instance for a connected account |
+| `composio triggers enable <id>` | Enable a trigger |
+| `composio triggers disable <id>` | Disable a trigger |
+| `composio triggers listen` | Stream live trigger events to your terminal (useful for development) |
+
+```bash
+composio triggers list
+composio triggers info GMAIL_NEW_GMAIL_MESSAGE
+composio triggers create GMAIL_NEW_GMAIL_MESSAGE \
+  --connected-account-id ca_abc123 \
+  --trigger-config '{"labelIds": ["INBOX"]}'
+composio triggers listen
+```
+
+---
+
+## Code Generation
+
+Generate TypeScript or Python type stubs from your Composio project for IDE autocompletion and type safety.
+
+| Command | Description |
+|---------|-------------|
+| `composio generate` | Auto-detect project language (TypeScript or Python) and generate stubs |
+| `composio generate ts` | Generate TypeScript type stubs |
+| `composio generate ts --type-tools` | Include per-tool typed input/output schemas (slower) |
+| `composio generate ts --toolkits <slug>` | Generate stubs for specific toolkits only |
+| `composio generate py` | Generate Python type stubs |
+| `composio generate py --toolkits <slug>` | Generate Python stubs for specific toolkits only |
+
+```bash
+# Auto-detect language and generate
+composio generate
+
+# TypeScript with full type-safe tool schemas
+composio generate ts --type-tools
+
+# Python stubs for GitHub and Slack only
+composio generate py --toolkits github --toolkits slack
+```
+
+---
+
+## Logs
+
+Inspect recent tool execution and trigger event logs for debugging.
+
+| Command | Description |
+|---------|-------------|
+| `composio logs tools` | Show recent tool execution logs |
+| `composio logs triggers` | Show recent trigger event logs |
+
+```bash
+composio logs tools
+composio logs triggers
+```
+
+---
+
+## Config and Organizations
+
+Manage CLI configuration and switch between Composio organizations.
+
+| Command | Description |
+|---------|-------------|
+| `composio config` | View and edit CLI configuration |
+| `composio orgs list` | List organizations your account belongs to |
+| `composio orgs switch` | Switch the active organization (interactive selector) |
+| `composio orgs switch --org-id <id>` | Switch to a specific organization by ID |
+
+```bash
+composio orgs list
+composio orgs switch
+```

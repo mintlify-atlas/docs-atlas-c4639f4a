@@ -1,0 +1,371 @@
+---
+title: 'Managing Connected Accounts'
+description: 'Connected accounts store per-user credentials for external services. Learn how to create, list, update, enable, disable, and delete connected accounts.'
+---
+
+A connected account (`ca_…`) is the record Composio creates when a user successfully authenticates with an external service. It holds encrypted tokens, API keys, or other credentials and is automatically resolved during tool execution so your application code never needs to handle raw secrets.
+
+## What is a connected account?
+
+Every connected account:
+
+- Carries a **nanoid prefixed with `ca_`** (e.g. `ca_abc123xyz`)
+- Belongs to exactly one **user ID** (your application's identifier for the user)
+- Is derived from an **auth config** that defines which OAuth app or credential scheme to use
+- Has a **status** that reflects the current validity of the credentials
+
+### Connection statuses
+
+| Status | Description |
+|---|---|
+| `INITIALIZING` | OAuth redirect flow has started; the user has not yet completed authorization |
+| `ACTIVE` | Credentials are valid. Tool executions use this account automatically |
+| `EXPIRED` | Token expired and automatic refresh failed |
+| `DELETED` | Account was permanently deleted |
+
+<Note>
+  `INACTIVE` is intentionally excluded from the terminal states list. An inactive account can recover to `ACTIVE` after a re-authentication, unlike `EXPIRED`, `FAILED`, or `REVOKED`.
+</Note>
+
+## Creating a connected account
+
+### Via `toolkits.authorize()` — zero-config path
+
+The simplest way to connect a user is `toolkits.authorize()`. Composio automatically resolves or creates the right auth config, then returns a `ConnectionRequest`.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const connectionRequest = await composio.toolkits.authorize('user_123', 'github');
+
+if (connectionRequest.redirectUrl) {
+  // Redirect your user here to complete the OAuth flow
+  console.log('OAuth URL:', connectionRequest.redirectUrl);
+}
+
+// Wait for the user to finish (polls until ACTIVE or timeout)
+const connectedAccount = await connectionRequest.waitForConnection(60000);
+console.log('Account ID:', connectedAccount.id);
+```
+
+```python Python
+import composio
+
+client = composio.Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+connection_request = client.toolkits.authorize(user_id="user_123", toolkit="github")
+
+if connection_request.redirect_url:
+    print("OAuth URL:", connection_request.redirect_url)
+
+# Wait for the user to finish (polls until ACTIVE or timeout in seconds)
+connected_account = connection_request.wait_for_connection(timeout=60.0)
+print("Account ID:", connected_account.id)
+```
+</CodeGroup>
+
+### Via `connected_accounts.link()` — explicit control
+
+Use `connected_accounts.link()` when you need to specify an explicit auth config ID — for example, when using a custom OAuth app for white-labeling.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const connectionRequest = await composio.connectedAccounts.link(
+  'user_123',
+  'ac_myGitHubAuthConfig',
+  { callbackUrl: 'https://your-app.com/oauth/callback' }
+);
+
+console.log('Redirect user to:', connectionRequest.redirectUrl);
+
+// Option A: await on the ConnectionRequest object itself
+const account = await connectionRequest.waitForConnection();
+
+// Option B: await by ID (useful when you stored the ID elsewhere)
+const account2 = await composio.connectedAccounts.waitForConnection(
+  connectionRequest.id,
+  120000 // 2-minute timeout
+);
+```
+
+```python Python
+import composio
+
+client = composio.Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+connection_request = client.connected_accounts.link(
+    user_id="user_123",
+    auth_config_id="ac_myGitHubAuthConfig",
+    callback_url="https://your-app.com/oauth/callback",
+)
+
+print("Redirect user to:", connection_request.redirect_url)
+
+# Option A: await on the ConnectionRequest object
+account = connection_request.wait_for_connection(timeout=60.0)
+
+# Option B: await by ID
+account2 = client.connected_accounts.wait_for_connection(
+    connection_request.id, timeout=120.0
+)
+```
+</CodeGroup>
+
+### Non-OAuth schemes (API key, bearer token, basic auth)
+
+For services that use static credentials rather than OAuth, create the connected account directly with the appropriate `AuthScheme` helper. The account becomes `ACTIVE` immediately — no redirect URL is returned.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio, AuthScheme } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+// API Key
+const apiKeyRequest = await composio.connectedAccounts.initiate(
+  'user_123',
+  'ac_myApiKeyConfig',
+  {
+    config: AuthScheme.APIKey({ api_key: 'sk-your-service-api-key' }),
+  }
+);
+
+// Bearer Token
+const bearerRequest = await composio.connectedAccounts.initiate(
+  'user_123',
+  'ac_myBearerConfig',
+  {
+    config: AuthScheme.BearerToken({ token: 'your-bearer-token' }),
+  }
+);
+
+// Basic Auth
+const basicRequest = await composio.connectedAccounts.initiate(
+  'user_123',
+  'ac_myBasicConfig',
+  {
+    config: AuthScheme.Basic({ username: 'user@example.com', password: 's3cr3t' }),
+  }
+);
+```
+
+```python Python
+from composio.core.models.connected_accounts import auth_scheme
+import composio
+
+client = composio.Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+# API Key
+api_key_request = client.connected_accounts.initiate(
+    user_id="user_123",
+    auth_config_id="ac_myApiKeyConfig",
+    config=auth_scheme.api_key({"api_key": "sk-your-service-api-key"}),
+)
+
+# Bearer Token
+bearer_request = client.connected_accounts.initiate(
+    user_id="user_123",
+    auth_config_id="ac_myBearerConfig",
+    config=auth_scheme.bearer_token({"token": "your-bearer-token"}),
+)
+
+# Basic Auth
+basic_request = client.connected_accounts.initiate(
+    user_id="user_123",
+    auth_config_id="ac_myBasicConfig",
+    config=auth_scheme.basic({"username": "user@example.com", "password": "s3cr3t"}),
+)
+```
+</CodeGroup>
+
+## Reading connected accounts
+
+### Get a single account
+
+<CodeGroup>
+```typescript TypeScript
+const account = await composio.connectedAccounts.get('ca_abc123');
+console.log(account.status);       // 'ACTIVE'
+console.log(account.toolkit.slug); // 'github'
+```
+
+```python Python
+account = client.connected_accounts.get("ca_abc123")
+print(account.status)          # 'ACTIVE'
+print(account.toolkit_slug)    # 'github'
+```
+</CodeGroup>
+
+### List accounts with filters
+
+<CodeGroup>
+```typescript TypeScript
+// All accounts for a user
+const userAccounts = await composio.connectedAccounts.list({
+  userIds: ['user_123'],
+});
+
+// Active GitHub accounts only
+const githubAccounts = await composio.connectedAccounts.list({
+  toolkitSlugs: ['github'],
+  statuses: ['ACTIVE'],
+});
+
+// Accounts for a specific auth config
+const configAccounts = await composio.connectedAccounts.list({
+  authConfigIds: ['ac_myGitHubAuthConfig'],
+});
+```
+
+```python Python
+# All accounts for a user
+user_accounts = client.connected_accounts.list(user_ids=["user_123"])
+
+# Active GitHub accounts only
+github_accounts = client.connected_accounts.list(
+    toolkit_slugs=["github"],
+    statuses=["ACTIVE"],
+)
+
+# Accounts for a specific auth config
+config_accounts = client.connected_accounts.list(
+    auth_config_ids=["ac_myGitHubAuthConfig"],
+)
+```
+</CodeGroup>
+
+## Updating a connected account
+
+Use `update()` to rename an account with a human-readable alias. Aliases must be unique per user ID and toolkit within your project.
+
+<CodeGroup>
+```typescript TypeScript
+// Set an alias
+await composio.connectedAccounts.update('ca_abc123', { alias: 'work-github' });
+
+// Clear the alias
+await composio.connectedAccounts.update('ca_abc123', { alias: '' });
+```
+
+```python Python
+# Set an alias
+client.connected_accounts.update("ca_abc123", alias="work-github")
+
+# Clear the alias
+client.connected_accounts.update("ca_abc123", alias="")
+```
+</CodeGroup>
+
+## Enabling and disabling accounts
+
+Disabling a connected account prevents it from being used for tool execution without permanently deleting it. You can re-enable it at any time.
+
+<CodeGroup>
+```typescript TypeScript
+// Disable
+await composio.connectedAccounts.disable('ca_abc123');
+
+// Re-enable
+await composio.connectedAccounts.enable('ca_abc123');
+```
+
+```python Python
+# Disable
+client.connected_accounts.disable("ca_abc123")
+
+# Re-enable
+client.connected_accounts.enable("ca_abc123")
+```
+</CodeGroup>
+
+## Refreshing credentials
+
+Force a token refresh for an OAuth account. Useful when a token has expired but automatic refresh failed.
+
+<CodeGroup>
+```typescript TypeScript
+const refreshed = await composio.connectedAccounts.refresh('ca_abc123');
+console.log(refreshed);
+```
+
+```python Python
+refreshed = client.connected_accounts.refresh("ca_abc123")
+print(refreshed)
+```
+</CodeGroup>
+
+## Deleting a connected account
+
+Deletion is **permanent** and revokes any stored access tokens.
+
+<CodeGroup>
+```typescript TypeScript
+await composio.connectedAccounts.delete('ca_abc123');
+```
+
+```python Python
+client.connected_accounts.delete("ca_abc123")
+```
+</CodeGroup>
+
+## Multi-account aliases
+
+A user can have more than one connected account for the same toolkit — for example, a personal and a work GitHub account. Use the `allowMultiple` / `allow_multiple` flag when creating the second account, and assign a unique `alias` to each so your code can tell them apart.
+
+<CodeGroup>
+```typescript TypeScript
+// First account (default)
+await composio.connectedAccounts.link('user_123', 'ac_githubConfig', {
+  alias: 'personal-github',
+});
+
+// Second account — must set allowMultiple to avoid an error
+await composio.connectedAccounts.link('user_123', 'ac_githubConfig', {
+  alias: 'work-github',
+  allowMultiple: true,
+});
+```
+
+```python Python
+# First account (default)
+client.connected_accounts.link(
+    user_id="user_123",
+    auth_config_id="ac_githubConfig",
+    alias="personal-github",
+)
+
+# Second account — must set allow_multiple to avoid an error
+client.connected_accounts.link(
+    user_id="user_123",
+    auth_config_id="ac_githubConfig",
+    alias="work-github",
+    allow_multiple=True,
+)
+```
+</CodeGroup>
+
+<Warning>
+  Without `allowMultiple: true`, calling `link()` or `initiate()` for a user who already has an `ACTIVE` account on the same auth config raises a `ComposioMultipleConnectedAccountsError`. This prevents silent duplicate connections.
+</Warning>
+
+## API reference summary
+
+| Method | Description |
+|---|---|
+| `connectedAccounts.link(userId, authConfigId, opts?)` | Create an OAuth connect link — returns a `ConnectionRequest` |
+| `connectedAccounts.initiate(userId, authConfigId, opts?)` | Create a connected account (non-OAuth or custom auth) |
+| `connectedAccounts.waitForConnection(id, timeout?)` | Poll until a connection becomes `ACTIVE` |
+| `connectedAccounts.get(nanoid)` | Fetch a connected account by `ca_…` ID |
+| `connectedAccounts.list(query?)` | List connected accounts with optional filters |
+| `connectedAccounts.update(nanoid, params)` | Update alias or credentials on an account |
+| `connectedAccounts.enable(nanoid)` | Re-enable a disabled account |
+| `connectedAccounts.disable(nanoid)` | Disable an account without deleting it |
+| `connectedAccounts.refresh(nanoid)` | Force a credential refresh |
+| `connectedAccounts.delete(nanoid)` | Permanently delete an account |

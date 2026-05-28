@@ -1,0 +1,359 @@
+---
+title: 'Configuring Composio Sessions'
+description: 'Control which toolkits, tools, and tags are available in a session. Configure managed connections, workbench, preloading, and experimental options.'
+---
+
+When you call `composio.create()` / `composio.tool_router.create()`, the second argument is a **session config** object that determines exactly which tools are available in the session, how connections are managed, and whether a persistent code sandbox is provisioned. Every field is optional — omit what you don't need.
+
+## Config Options Reference
+
+| Option | Type | Description |
+|---|---|---|
+| `toolkits` | `string[]` or `{ enable: string[] }` or `{ disable: string[] }` | Allow-list or deny-list specific toolkits. |
+| `tools` | `Record<string, string[] \| { enable } \| { disable } \| { tags }>` | Per-toolkit tool-level filtering. |
+| `tags` | `string[]` or `{ enable, disable }` | Global MCP tag filter applied across all toolkits. |
+| `manage_connections` | `boolean` or `{ enable, callback_url, wait_for_connections }` | Control whether Composio injects connection-management meta tools. |
+| `workbench` | `{ enable, sandbox_size, enable_proxy_execution, auto_offload_threshold }` | Configure the persistent code sandbox. |
+| `preload` | `{ tools: string[] \| 'all' }` | Expose specific tools directly without requiring a search call first. |
+| `session_preset` | `'direct_tools'` | Apply a named preset that configures several options at once. |
+| `experimental` | `{ assistive_prompt, custom_tools, custom_toolkits }` | Experimental features — shape may change. |
+
+---
+
+## `toolkits` — Enable or Disable Toolkits
+
+Pass a plain list to **enable** specific toolkits. Use the object form to explicitly enable or disable.
+
+<CodeGroup>
+```typescript TypeScript
+// Enable a list of toolkits
+const session = await composio.create('user_123', {
+  toolkits: ['github', 'slack'],
+});
+
+// Explicitly enable (same as the list shorthand)
+const session = await composio.create('user_123', {
+  toolkits: { enable: ['github', 'slack'] },
+});
+
+// Disable specific toolkits and allow everything else
+const session = await composio.create('user_123', {
+  toolkits: { disable: ['linear'] },
+});
+```
+
+```python Python
+# Enable a list of toolkits
+session = composio.tool_router.create(
+    user_id="user_123",
+    toolkits=["github", "slack"],
+)
+
+# Explicitly enable (same as the list shorthand)
+session = composio.tool_router.create(
+    user_id="user_123",
+    toolkits={"enable": ["github", "slack"]},
+)
+
+# Disable specific toolkits and allow everything else
+session = composio.tool_router.create(
+    user_id="user_123",
+    toolkits={"disable": ["linear"]},
+)
+```
+</CodeGroup>
+
+---
+
+## `tools` — Per-Toolkit Tool Filtering
+
+The `tools` option is a dictionary keyed by toolkit slug. Each value selects which tools within that toolkit are available.
+
+<CodeGroup>
+```typescript TypeScript
+const session = await composio.create('user_123', {
+  tools: {
+    // List shorthand — enables only these tools for github
+    github: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS'],
+
+    // Explicit enable whitelist
+    gmail: { enable: ['GMAIL_SEND_EMAIL'] },
+
+    // Explicit disable blacklist — everything except this tool
+    slack: { disable: ['SLACK_DELETE_MESSAGE'] },
+
+    // Filter by MCP tags — only read-only linear tools
+    linear: { tags: ['readOnlyHint'] },
+  },
+});
+```
+
+```python Python
+session = composio.tool_router.create(
+    user_id="user_123",
+    tools={
+        # List shorthand — enables only these tools for github
+        "github": ["GITHUB_CREATE_ISSUE", "GITHUB_LIST_REPOS"],
+
+        # Explicit enable whitelist
+        "gmail": {"enable": ["GMAIL_SEND_EMAIL"]},
+
+        # Explicit disable blacklist — everything except this tool
+        "slack": {"disable": ["SLACK_DELETE_MESSAGE"]},
+
+        # Filter by MCP tags — only read-only linear tools
+        "linear": {"tags": ["readOnlyHint"]},
+    },
+)
+```
+</CodeGroup>
+
+---
+
+## `tags` — Global MCP Tag Filtering
+
+Filter tools across **all** toolkits by their MCP annotation tags. The available tag values are `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`.
+
+<CodeGroup>
+```typescript TypeScript
+// Enable only read-only tools across all toolkits
+const session = await composio.create('user_123', {
+  tags: ['readOnlyHint'],
+});
+
+// Enable and disable specific tags
+const session = await composio.create('user_123', {
+  tags: {
+    enable: ['readOnlyHint', 'idempotentHint'],
+    disable: ['destructiveHint'],
+  },
+});
+```
+
+```python Python
+# Enable only read-only tools across all toolkits
+session = composio.tool_router.create(
+    user_id="user_123",
+    tags=["readOnlyHint"],
+)
+
+# Enable and disable specific tags
+session = composio.tool_router.create(
+    user_id="user_123",
+    tags={
+        "enable": ["readOnlyHint", "idempotentHint"],
+        "disable": ["destructiveHint"],
+    },
+)
+```
+</CodeGroup>
+
+---
+
+## `manage_connections` — Connection Management
+
+Controls whether Composio injects the `COMPOSIO_MANAGE_CONNECTIONS` meta tool and related helpers. Set to `true` (default) to let the agent guide users through OAuth and API-key flows automatically.
+
+<CodeGroup>
+```typescript TypeScript
+// Simple boolean — enable connection management
+const session = await composio.create('user_123', {
+  manageConnections: true,
+});
+
+// With a custom OAuth callback URL
+const session = await composio.create('user_123', {
+  manageConnections: {
+    enable: true,
+    callbackUrl: 'https://your-app.com/oauth/callback',
+    waitForConnections: true,
+  },
+});
+
+// Disable entirely — manage connections manually
+const session = await composio.create('user_123', {
+  manageConnections: false,
+});
+```
+
+```python Python
+# Simple boolean — enable connection management
+session = composio.tool_router.create(
+    user_id="user_123",
+    manage_connections=True,
+)
+
+# With a custom OAuth callback URL
+session = composio.tool_router.create(
+    user_id="user_123",
+    manage_connections={
+        "enable": True,
+        "callback_url": "https://your-app.com/oauth/callback",
+        "wait_for_connections": True,
+    },
+)
+
+# Disable entirely — manage connections manually
+session = composio.tool_router.create(
+    user_id="user_123",
+    manage_connections=False,
+)
+```
+</CodeGroup>
+
+---
+
+## `workbench` — Persistent Code Sandbox
+
+Enables a per-session Python execution environment. See the [Workbench guide](/sessions/workbench) for full details.
+
+<CodeGroup>
+```typescript TypeScript
+// Enable with a larger sandbox
+const session = await composio.create('user_123', {
+  workbench: {
+    enable: true,
+    sandboxSize: 'large', // 4 vCPU / 4 GB RAM
+  },
+});
+
+// Disable the workbench entirely
+const session = await composio.create('user_123', {
+  workbench: { enable: false },
+});
+```
+
+```python Python
+# Enable with a larger sandbox
+session = composio.tool_router.create(
+    user_id="user_123",
+    workbench={
+        "enable": True,
+        "sandbox_size": "large",  # 4 vCPU / 4 GB RAM
+    },
+)
+
+# Disable the workbench entirely
+session = composio.tool_router.create(
+    user_id="user_123",
+    workbench={"enable": False},
+)
+```
+</CodeGroup>
+
+Sandbox size options and their compute resources:
+
+| `sandbox_size` | vCPU | RAM |
+|---|---|---|
+| `standard` (default) | 1 | 1 GB |
+| `medium` | 2 | 2 GB |
+| `large` | 4 | 4 GB |
+| `xlarge` | 8 | 8 GB |
+
+---
+
+## `preload` — Pre-expose Tools Without Search
+
+By default, agents must call `COMPOSIO_SEARCH_TOOLS` before a tool becomes available in the session. Use `preload` to expose tools directly in `session.tools()` without requiring a search step first.
+
+<CodeGroup>
+```typescript TypeScript
+// Preload specific tools
+const session = await composio.create('user_123', {
+  preload: {
+    tools: ['GITHUB_CREATE_ISSUE', 'SLACK_SEND_MESSAGE'],
+  },
+});
+
+// Preload ALL tools matching the session's toolkit/tag filters
+const session = await composio.create('user_123', {
+  toolkits: ['github'],
+  preload: { tools: 'all' },
+});
+```
+
+```python Python
+# Preload specific tools
+session = composio.tool_router.create(
+    user_id="user_123",
+    preload={"tools": ["GITHUB_CREATE_ISSUE", "SLACK_SEND_MESSAGE"]},
+)
+
+# Preload ALL tools matching the session's toolkit/tag filters
+session = composio.tool_router.create(
+    user_id="user_123",
+    toolkits=["github"],
+    preload={"tools": "all"},
+)
+```
+</CodeGroup>
+
+---
+
+## `session_preset` — Named Configuration Presets
+
+Presets bundle several config options into a single named shorthand.
+
+<CodeGroup>
+```typescript TypeScript
+const session = await composio.create('user_123', {
+  sessionPreset: 'direct_tools',
+  toolkits: ['github'],
+});
+```
+
+```python Python
+from composio.core.models.tool_router_constants import SESSION_PRESET_DIRECT_TOOLS
+
+session = composio.tool_router.create(
+    user_id="user_123",
+    session_preset=SESSION_PRESET_DIRECT_TOOLS,
+    toolkits=["github"],
+)
+```
+</CodeGroup>
+
+<Tip>
+The `direct_tools` preset is ideal when you know exactly which tools your agent needs upfront. It automatically sets `manage_connections: false`, `workbench.enable: false`, and `preload.tools: 'all'` — removing meta tools and exposing app tools directly. This reduces model context usage compared to the default search-driven flow. Any explicit override in your config still wins over the preset defaults.
+</Tip>
+
+---
+
+## Full Example: Combining Options
+
+<CodeGroup>
+```typescript TypeScript
+const session = await composio.create('user_123', {
+  toolkits: ['github', 'slack'],
+  tools: {
+    github: { enable: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_ISSUES'] },
+    slack: { disable: ['SLACK_DELETE_MESSAGE'] },
+  },
+  tags: ['readOnlyHint', 'idempotentHint'],
+  manageConnections: {
+    enable: true,
+    callbackUrl: 'https://app.example.com/oauth/callback',
+  },
+  workbench: { enable: true, sandboxSize: 'medium' },
+  preload: { tools: ['GITHUB_CREATE_ISSUE'] },
+});
+```
+
+```python Python
+session = composio.tool_router.create(
+    user_id="user_123",
+    toolkits=["github", "slack"],
+    tools={
+        "github": {"enable": ["GITHUB_CREATE_ISSUE", "GITHUB_LIST_ISSUES"]},
+        "slack": {"disable": ["SLACK_DELETE_MESSAGE"]},
+    },
+    tags=["readOnlyHint", "idempotentHint"],
+    manage_connections={
+        "enable": True,
+        "callback_url": "https://app.example.com/oauth/callback",
+    },
+    workbench={"enable": True, "sandbox_size": "medium"},
+    preload={"tools": ["GITHUB_CREATE_ISSUE"]},
+)
+```
+</CodeGroup>

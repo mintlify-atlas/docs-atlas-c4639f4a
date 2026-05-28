@@ -1,0 +1,212 @@
+---
+title: 'Tool Modifiers: Schema, Input, and Output Hooks'
+description: 'Composio modifiers are middleware hooks that intercept tool schemas, execution inputs, and execution outputs. Apply them globally or per-tool to transform behavior.'
+---
+
+**Modifiers** are composable middleware functions that let you intercept and transform tool behavior at three distinct points in the execution lifecycle: schema retrieval, pre-execution, and post-execution. They can be applied globally (to every tool) or scoped to specific tools or toolkits.
+
+Modifiers are passed as a list to `session.tools()`, `composio.tools.get()`, or `composio.tools.execute()`.
+
+## The Four Modifier Types
+
+| Modifier | When It Runs | What It Receives | What It Returns |
+|---|---|---|---|
+| `schema_modifier` | When fetching tool schemas | `(tool, toolkit, schema)` | Modified `Tool` schema |
+| `before_execute` | Just before a tool call is sent | `(tool, toolkit, params)` | Modified `ToolExecuteParams` |
+| `after_execute` | Just after a tool call returns | `(tool, toolkit, response)` | Modified `ToolExecutionResponse` |
+| `before_file_upload` | When a file path is about to be uploaded | `(context)` with `path`, `source`, `tool`, `toolkit` | New path string, or `False` to abort |
+
+---
+
+## Python Modifier Decorators
+
+Import the decorator factories from `composio`:
+
+```python
+from composio import before_execute, after_execute, schema_modifier, before_file_upload
+```
+
+### `@before_execute` — Intercept Inputs
+
+`before_execute` receives the full `ToolExecuteParams` dict (which includes `arguments`) and must return the (optionally modified) params.
+
+```python
+from composio import before_execute, Composio
+
+composio = Composio()
+
+@before_execute
+def log_inputs(tool: str, toolkit: str, params: dict) -> dict:
+    print(f"[{toolkit}/{tool}] arguments: {params['arguments']}")
+    return params  # Return unchanged, or mutate and return
+
+# Scope to a single tool
+@before_execute(tools=["GITHUB_CREATE_ISSUE"])
+def inject_labels(tool: str, toolkit: str, params: dict) -> dict:
+    params["arguments"].setdefault("labels", ["ai-generated"])
+    return params
+
+# Scope to a whole toolkit
+@before_execute(toolkits=["slack"])
+def add_slack_prefix(tool: str, toolkit: str, params: dict) -> dict:
+    if "text" in params["arguments"]:
+        params["arguments"]["text"] = "[Bot] " + params["arguments"]["text"]
+    return params
+```
+
+### `@after_execute` — Intercept Outputs
+
+`after_execute` receives the `ToolExecutionResponse` (a dict with `data`, `error`, `successful`) and must return the (optionally modified) response.
+
+```python
+from composio import after_execute
+
+@after_execute
+def sanitize_response(tool: str, toolkit: str, response: dict) -> dict:
+    # Strip any keys that shouldn't be exposed to the agent
+    if isinstance(response.get("data"), dict):
+        response["data"].pop("internal_id", None)
+    return response
+
+# Scope to a single toolkit's output
+@after_execute(toolkits=["github"])
+def count_results(tool: str, toolkit: str, response: dict) -> dict:
+    if isinstance(response.get("data"), dict):
+        items = response["data"].get("items", [])
+        print(f"[github/{tool}] returned {len(items)} items")
+    return response
+```
+
+### `@schema_modifier` — Transform Tool Schemas
+
+`schema_modifier` runs when schemas are fetched and lets you rename, redescribe, or restructure tool definitions before they are passed to the model.
+
+```python
+from composio import schema_modifier
+
+@schema_modifier
+def shorten_descriptions(tool: str, toolkit: str, schema) -> object:
+    # schema is the full Tool object
+    if schema.description and len(schema.description) > 200:
+        schema.description = schema.description[:197] + "..."
+    return schema
+
+# Scope to a single tool
+@schema_modifier(tools=["GMAIL_SEND_EMAIL"])
+def rename_send_email(tool: str, toolkit: str, schema) -> object:
+    schema.description = "Send an email via Gmail. Use this when the user wants to email someone."
+    return schema
+```
+
+### `@before_file_upload` — Control File Uploads
+
+`before_file_upload` fires when a local file path or URL is about to be uploaded. Return a new path/URL string to substitute, or `False` to abort the upload.
+
+```python
+from composio import before_file_upload
+
+@before_file_upload
+def audit_uploads(context: dict) -> str | bool:
+    path = context["path"]
+    source = context["source"]  # "path" for local, "url" for http(s)
+    print(f"Uploading {source}: {path} for {context['toolkit']}/{context['tool']}")
+    # Return False to abort, or return the path to continue
+    return path
+```
+
+---
+
+## Passing Modifiers to API Methods
+
+Pass the list of modifier objects (returned by the decorator factories) to any method that accepts `modifiers=`.
+
+<Steps>
+  <Step title="Create modifiers">
+    Define your modifier functions using the decorators above.
+  </Step>
+  <Step title="Pass to session.tools()">
+    ```python
+    tools = session.tools(modifiers=[log_inputs, sanitize_response, shorten_descriptions])
+    ```
+  </Step>
+  <Step title="Or pass to composio.tools.get()">
+    ```python
+    tools = composio.tools.get(
+        user_id="user_123",
+        toolkits=["github"],
+        modifiers=[inject_labels, shorten_descriptions],
+    )
+    ```
+  </Step>
+  <Step title="Or pass to composio.tools.execute()">
+    ```python
+    result = composio.tools.execute(
+        "GITHUB_CREATE_ISSUE",
+        {"owner": "my-org", "repo": "my-repo", "title": "Bug"},
+        user_id="user_123",
+        modifiers=[log_inputs, sanitize_response],
+    )
+    ```
+  </Step>
+</Steps>
+
+---
+
+## TypeScript Modifiers
+
+In TypeScript, modifiers are plain objects with a `type` field. Pass them via the `modifySchema` option on `session.tools()`.
+
+```typescript
+import { Composio } from '@composio/core';
+
+const composio = new Composio();
+const session = await composio.create('user_123', { toolkits: ['github'] });
+
+// Schema modifier in TypeScript
+const tools = await session.tools({
+  modifySchema: async ({ toolSlug, toolkitSlug, schema }) => {
+    if (schema.description && schema.description.length > 200) {
+      schema.description = schema.description.slice(0, 197) + '...';
+    }
+    return schema;
+  },
+});
+```
+
+For `before_execute` and `after_execute` in TypeScript, wrap your execute call:
+
+```typescript
+// TypeScript: wrap the execute function for before/after hooks
+const result = await composio.tools.execute(
+  'GITHUB_CREATE_ISSUE',
+  { owner: 'my-org', repo: 'my-repo', title: 'Bug' },
+  { userId: 'user_123' }
+);
+```
+
+---
+
+## Scoping Rules
+
+Modifiers with **no** `tools` or `toolkits` arguments apply to **all** tools. Scoped modifiers only fire when `tool` matches one of the listed slugs or `toolkit` matches one of the listed toolkit slugs.
+
+```python
+# Applies to every tool (global)
+@before_execute
+def global_hook(tool, toolkit, params):
+    return params
+
+# Applies only to GITHUB_CREATE_ISSUE
+@before_execute(tools=["GITHUB_CREATE_ISSUE"])
+def issue_hook(tool, toolkit, params):
+    return params
+
+# Applies to every tool in the slack toolkit
+@before_execute(toolkits=["slack"])
+def slack_hook(tool, toolkit, params):
+    return params
+```
+
+<Note>
+When multiple modifiers of the same type match a tool, they are applied **in list order** — the output of the first modifier becomes the input of the second. Design your modifiers to be composable and order-agnostic where possible.
+</Note>

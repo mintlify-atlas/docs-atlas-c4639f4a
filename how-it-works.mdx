@@ -1,0 +1,270 @@
+---
+title: 'How Composio Works'
+description: 'Learn the core concepts behind Composio: sessions, tool routing, toolkits, connected accounts, auth configs, providers, triggers, and MCP.'
+---
+
+Composio sits between your AI agent and the external world. When an agent decides to call a tool — say, create a GitHub issue — Composio receives the request, looks up the right user credential, calls the GitHub API on the user's behalf, and returns the structured result. You write agent logic; Composio handles auth, routing, and execution.
+
+## Architecture Overview
+
+A typical Composio-powered agent flow looks like this:
+
+1. **Initialize** — Your backend creates a `Composio` instance configured with a provider (the AI framework adapter).
+2. **Create a session** — For each user interaction, you call `composio.create(userId, { toolkits: [...] })`. This returns a `ToolRouterSession` scoped to that user.
+3. **Fetch tools** — You call `session.tools()` to get tool definitions formatted for your AI framework (e.g. OpenAI function-call objects, LangChain `BaseTool` instances).
+4. **Run the agent** — You pass those tools to the agent. When the agent emits a tool call, the provider routes it back through the session, which authenticates and executes it against the live API.
+5. **Receive the result** — The structured API response is returned to the agent as a tool result, ready for the next reasoning step.
+
+The session is ephemeral — it exists for the lifetime of a single agent run and carries no persistent state of its own. Credentials and configuration live in **Connected Accounts** and **Auth Configs** (see below), so sessions stay lightweight and cheap to create.
+
+---
+
+## Sessions
+
+A session is the fundamental runtime unit in Composio. It binds a **user identity**, a set of **toolkits**, and (optionally) specific tool slugs or tags into an isolated context.
+
+<CodeGroup>
+  ```typescript TypeScript
+  import { Composio } from '@composio/core';
+  import { OpenAIAgentsProvider } from '@composio/openai-agents';
+
+  const composio = new Composio({ provider: new OpenAIAgentsProvider() });
+
+  // Create a session for a specific user
+  const session = await composio.create('user@acme.org', {
+    toolkits: ['github', 'slack'],
+  });
+
+  // Retrieve the provider-wrapped tools
+  const tools = await session.tools();
+  ```
+
+  ```python Python
+  from composio import Composio
+  from composio_openai_agents import OpenAIAgentsProvider
+
+  composio = Composio(provider=OpenAIAgentsProvider())
+
+  # Create a session for a specific user
+  session = composio.create(
+      user_id='user@acme.org',
+      toolkits=['github', 'slack'],
+  )
+
+  # Retrieve the provider-wrapped tools
+  tools = session.tools()
+  ```
+</CodeGroup>
+
+Key properties of a session:
+
+- **Scoped to one user** — The `userId` determines which Connected Accounts (credentials) are used for every tool execution inside the session.
+- **Toolkit filtering** — Passing `toolkits: ['github']` limits the tools available in the session to those belonging to the GitHub toolkit only.
+- **Short-lived** — Sessions are designed to be created per agent run, not stored or reused across requests.
+- **MCP endpoint** — Each session exposes a live MCP server URL at `session.mcp.url` (see [MCP](#mcp) below).
+
+---
+
+## Tools & Toolkits
+
+### Toolkits
+
+A **toolkit** is a named collection of tools for one external service. Toolkit slugs are lowercase: `github`, `slack`, `gmail`, `notion`, `hackernews`, and so on. Composio hosts 1,000+ toolkits.
+
+### Tools
+
+A **tool** is a single callable action or data-read operation within a toolkit. Tool slugs follow the `TOOLKIT_ACTION` naming convention — all uppercase, toolkit name first, underscore-separated:
+
+| Slug | What it does |
+|---|---|
+| `GITHUB_CREATE_ISSUE` | Creates a new issue in a GitHub repository |
+| `GITHUB_LIST_REPOS` | Lists repositories for the authenticated user |
+| `SLACK_SEND_MESSAGE` | Posts a message to a Slack channel |
+| `GMAIL_SEARCH_EMAILS` | Searches emails in a Gmail inbox |
+| `HACKERNEWS_GET_USER` | Fetches a HackerNews user profile |
+
+You can pass individual tool slugs to a session to restrict which tools are available:
+
+<CodeGroup>
+  ```typescript TypeScript
+  const session = await composio.create('user@acme.org', {
+    toolkits: ['github'],
+    tools: {
+      github: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS'],
+    },
+  });
+  ```
+
+  ```python Python
+  session = composio.create(
+      user_id='user@acme.org',
+      toolkits=['github'],
+      tools={
+          'github': ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS'],
+      },
+  )
+  ```
+</CodeGroup>
+
+### Meta Tools
+
+Sessions also expose a small set of built-in **meta tools** for connection management (e.g. prompting a user to authenticate a missing toolkit). These are injected automatically when `manage_connections` is enabled on the session.
+
+---
+
+## Providers
+
+A **provider** is an adapter that translates Composio's internal tool representation into the format expected by a specific AI framework. Every provider ships as its own package:
+
+| Provider package | Framework |
+|---|---|
+| `@composio/openai-agents` / `composio-openai-agents` | OpenAI Agents SDK |
+| `@composio/openai` / `composio-openai` | OpenAI Chat Completions |
+| `@composio/anthropic` / `composio-anthropic` | Anthropic Claude |
+| `@composio/langchain` / `composio-langchain` | LangChain & LangGraph |
+| `@composio/llamaindex` / `composio-llamaindex` | LlamaIndex |
+| `@composio/vercel` | Vercel AI SDK |
+| `@composio/google` / `composio-gemini` | Google Gemini |
+| `@composio/mastra` | Mastra |
+| `@composio/cloudflare` | Cloudflare Workers AI |
+| `composio-crewai` | CrewAI |
+| `composio-autogen` | AutoGen |
+| `composio-google-adk` | Google Agent Development Kit |
+
+Providers are passed to the `Composio` constructor once, at startup. All sessions created from that instance inherit the same provider. You can extend `BaseAgenticProvider` or `BaseNonAgenticProvider` (TypeScript) or `BaseProvider` (Python) to build a custom adapter for any framework not listed above.
+
+---
+
+## Auth Configs & Connected Accounts
+
+### Auth Configs
+
+An **Auth Config** is a blueprint that describes *how* to authenticate with a service — which OAuth app credentials to use, which scopes to request, or how to validate API keys. Auth Configs are defined at the organization level in the Composio dashboard or via the API.
+
+Think of an Auth Config as the template; a Connected Account is an instance of that template for a specific user.
+
+### Connected Accounts
+
+A **Connected Account** stores the live credentials (OAuth tokens, API keys, etc.) for one user's connection to one toolkit. When a session executes a tool, Composio automatically looks up the correct Connected Account for the `userId` and injects the credentials into the API call — your agent never sees raw secrets.
+
+Users connect their accounts through an OAuth redirect or credential-submission flow that Composio provides. You can initiate this flow from the session:
+
+<CodeGroup>
+  ```typescript TypeScript
+  // Prompt the user to authorize the GitHub toolkit
+  const connectionRequest = await session.authorize('github');
+
+  // Redirect the user to this URL to complete the OAuth flow
+  console.log(connectionRequest.redirectUrl);
+  ```
+
+  ```python Python
+  # Prompt the user to authorize the GitHub toolkit
+  connection_request = session.authorize('github')
+
+  # Redirect the user to this URL to complete the OAuth flow
+  print(connection_request.redirect_url)
+  ```
+</CodeGroup>
+
+---
+
+## Triggers
+
+**Triggers** let your application react to external events without polling. Composio supports both webhook-based and polling-based triggers, abstracted behind the same API.
+
+<CodeGroup>
+  ```typescript TypeScript
+  // Subscribe to new GitHub pull requests for a user
+  await composio.triggers.create('user@acme.org', 'GITHUB_PULL_REQUEST_EVENT', {
+    triggerConfig: {
+      owner: 'my-org',
+      repo: 'my-repo',
+    },
+  });
+  ```
+
+  ```python Python
+  # Subscribe to new GitHub pull requests for a user
+  composio.triggers.create(
+      user_id='user@acme.org',
+      slug='GITHUB_PULL_REQUEST_EVENT',
+      trigger_config={
+          'owner': 'my-org',
+          'repo': 'my-repo',
+      },
+  )
+  ```
+</CodeGroup>
+
+Trigger slugs follow the same `TOOLKIT_EVENT` pattern as tool slugs (e.g. `GITHUB_PULL_REQUEST_EVENT`, `GMAIL_NEW_EMAIL_RECEIVED`). When the event fires, Composio delivers a structured payload to the webhook URL you configured in the dashboard.
+
+<Info>
+  Incoming webhook payloads can be verified with `composio.triggers.verifyWebhook(...)` to ensure they originated from Composio and have not been tampered with.
+</Info>
+
+---
+
+## MCP
+
+Every Composio session doubles as a **Model Context Protocol (MCP) server**. After creating a session you can hand its MCP URL to any MCP-compatible client — Cursor, Claude Desktop, VS Code, Claude Code, or your own custom client — and that client will automatically discover and call the same tools your agent uses.
+
+<CodeGroup>
+  ```typescript TypeScript
+  const session = await composio.create('user@acme.org', {
+    toolkits: ['github'],
+  });
+
+  // Pass this URL to any MCP client
+  console.log(session.mcp.url);
+  // e.g. https://mcp.composio.dev/session/sess_abc123/sse
+
+  // Some clients also require authentication headers
+  console.log(session.mcp.headers);
+  ```
+
+  ```python Python
+  session = composio.create(
+      user_id='user@acme.org',
+      toolkits=['github'],
+  )
+
+  # Pass this URL to any MCP client
+  print(session.mcp.url)
+  # e.g. https://mcp.composio.dev/session/sess_abc123/sse
+
+  # Some clients also require authentication headers
+  print(session.mcp.headers)
+  ```
+</CodeGroup>
+
+<Tip>
+  [Rube](https://rube.app) is a standalone MCP server built on Composio. It lets you authenticate once with 500+ apps and use them across Cursor, Claude Desktop, VS Code, and any other MCP client — without writing any code.
+</Tip>
+
+---
+
+## Glossary
+
+| Term | Definition |
+|---|---|
+| **Session** | An ephemeral, per-user runtime context created with `composio.create(userId, …)`. |
+| **Toolkit** | A named bundle of tools for one external service (e.g. `github`, `slack`). |
+| **Tool** | A single callable action; slug format is `TOOLKIT_ACTION` (all uppercase). |
+| **Provider** | An adapter package that formats tools for a specific AI framework. |
+| **Auth Config** | An organization-level blueprint describing how to authenticate with a service. |
+| **Connected Account** | A user-level credential record linking one user to one toolkit. |
+| **Trigger** | A webhook or polling listener that fires when an external event occurs. |
+| **MCP** | Model Context Protocol — an open standard for exposing tools to AI clients. |
+| **Meta Tool** | A built-in Composio tool for connection management (injected automatically by sessions). |
+
+---
+
+<CardGroup cols={2}>
+  <Card title="Sessions" icon="layer-group" href="/sessions/overview">
+    Deep-dive into session configuration, preloads, multi-account mode, and lifecycle management.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/authentication/overview">
+    Learn how Auth Configs and Connected Accounts work, and how to build custom auth flows.
+  </Card>
+</CardGroup>

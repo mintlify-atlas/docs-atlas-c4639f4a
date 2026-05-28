@@ -1,0 +1,184 @@
+---
+title: 'Migrating to the Current Composio SDK'
+description: 'Upgrade from legacy Composio patterns to the current session-based API. Key changes: sessions replace direct tool fetching, and ToolRouter replaces the old Toolset pattern.'
+---
+
+The current Composio SDK introduces a session-based model that replaces the older `ComposioToolSet` / direct toolset pattern. The new model is cleaner, more explicit about multi-user isolation, and is the foundation for MCP server support, dynamic tool discovery, and the `composio.experimental` surface. This guide walks through the key changes and provides side-by-side before/after examples.
+
+## Key changes
+
+<Steps>
+  <Step title="Sessions replace direct tool fetching">
+    The primary way to work with tools is now `composio.create(userId)`, which creates an isolated session for a specific user. The session owns tool discovery, execution, and auth — all scoped to that user. Direct `composio.tools.get()` is still available for simple scripts but is no longer the recommended pattern for multi-user apps.
+  </Step>
+  <Step title="ToolRouter consolidates session management">
+    The `ToolRouter` class (accessed via `composio.tool_router` in Python and the `composio.create()` shorthand in both languages) consolidates session lifecycle. You no longer need to manage individual toolsets per framework integration.
+  </Step>
+  <Step title="Provider adapters are separate packages">
+    Framework adapters (OpenAI, Anthropic, LangChain, etc.) are now separate packages (`@composio/openai`, `@composio/anthropic`, etc. in TypeScript; `composio-openai`, etc. in Python). Pass a provider instance to `Composio()` at construction time rather than importing a framework-specific `ComposioToolSet`.
+  </Step>
+  <Step title="Auth is automatic via session.authorize()">
+    Instead of manually creating connected accounts, call `session.authorize(toolkit)` inside the session context. Composio returns an auth URL or completes the connection flow automatically, and the session is ready to execute tools once the user authenticates.
+  </Step>
+</Steps>
+
+## Migration reference
+
+| Old pattern | New pattern |
+|-------------|-------------|
+| `from composio_openai import ComposioToolSet` | `from composio import Composio` + `from composio_openai import OpenAIProvider` |
+| `ComposioToolSet(api_key=..., entity_id=...)` | `Composio(provider=OpenAIProvider(), api_key=...)` |
+| `toolset.get_tools(apps=[App.GITHUB])` | `session = composio.create(user_id=...)` then `session.tools()` |
+| `toolset.execute_action(action, params, entity_id)` | `composio.tools.execute(slug, arguments, user_id=...)` or `session.execute(slug, arguments)` |
+| Manual connected account creation | `session.authorize(toolkit)` returns auth URL |
+| Framework-specific `ComposioToolSet` subclass | Pass `provider=` to generic `Composio()` |
+
+## Before and after
+
+The following example shows a complete migration from the old `ComposioToolSet` pattern to the current session-based API using the OpenAI provider.
+
+### Before (legacy pattern)
+
+<CodeGroup>
+```python Python (legacy)
+from composio_openai import ComposioToolSet, App
+from openai import OpenAI
+
+# Old: framework-specific toolset class
+toolset = ComposioToolSet(api_key="YOUR_API_KEY", entity_id="user_123")
+
+# Old: fetch tools using App enum
+tools = toolset.get_tools(apps=[App.GITHUB])
+
+client = OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Create a GitHub issue"}],
+    tools=tools,
+)
+
+# Old: execute via toolset with entity_id
+result = toolset.execute_action(
+    action="GITHUB_CREATE_ISSUE",
+    params={"title": "Bug report", "body": "...", "owner": "my-org", "repo": "my-repo"},
+    entity_id="user_123",
+)
+```
+
+```typescript TypeScript (legacy)
+import { OpenAIToolSet } from 'composio-core'; // old package
+import OpenAI from 'openai';
+
+// Old: framework-specific toolset class
+const toolset = new OpenAIToolSet({ apiKey: 'YOUR_API_KEY', entityId: 'user_123' });
+
+// Old: fetch tools with apps array
+const tools = await toolset.getTools({ apps: ['github'] });
+
+const client = new OpenAI();
+const response = await client.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Create a GitHub issue' }],
+  tools,
+});
+
+// Old: execute via toolset
+const result = await toolset.executeAction(
+  'GITHUB_CREATE_ISSUE',
+  { title: 'Bug report', body: '...', owner: 'my-org', repo: 'my-repo' },
+  'user_123'
+);
+```
+</CodeGroup>
+
+### After (current API)
+
+<CodeGroup>
+```python Python (current)
+from composio import Composio
+from composio_openai import OpenAIProvider
+from openai import OpenAI
+
+# New: generic Composio client with explicit provider
+composio = Composio(provider=OpenAIProvider())
+
+client = OpenAI()
+
+# New: create an isolated session for the user
+session = composio.create(user_id="user_123", toolkits=["github"])
+
+# Auth is automatic — session.authorize() if the user hasn't connected yet
+# url = session.authorize("github")  # returns OAuth URL to redirect the user
+
+# New: fetch provider-wrapped tools from the session
+tools = session.tools()
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Create a GitHub issue"}],
+    tools=tools,
+)
+
+# New: execute directly on the session or via composio.tools
+result = session.execute(
+    "GITHUB_CREATE_ISSUE",
+    {"title": "Bug report", "body": "...", "owner": "my-org", "repo": "my-repo"},
+)
+print(result["successful"])  # True
+```
+
+```typescript TypeScript (current)
+import { Composio } from '@composio/core';
+import { OpenAIProvider } from '@composio/openai';
+import OpenAI from 'openai';
+
+// New: generic Composio client with explicit provider
+const composio = new Composio({
+  apiKey: process.env.COMPOSIO_API_KEY,
+  provider: new OpenAIProvider(),
+});
+
+const client = new OpenAI();
+
+// New: create an isolated session for the user
+const session = await composio.create('user_123', { toolkits: ['github'] });
+
+// Auth is automatic — session.authorize() if the user hasn't connected yet
+// const { redirectUrl } = await session.authorize('github');
+
+// New: fetch provider-wrapped tools from the session
+const tools = await session.tools();
+
+const response = await client.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Create a GitHub issue' }],
+  tools,
+});
+
+// New: execute directly on the session
+const result = await session.execute('GITHUB_CREATE_ISSUE', {
+  title: 'Bug report',
+  body: '...',
+  owner: 'my-org',
+  repo: 'my-repo',
+});
+console.log(result.successful); // true
+```
+</CodeGroup>
+
+## Backward compatibility
+
+The core execution path (`composio.tools.get()` and `composio.tools.execute()`) remains available and unchanged. You can migrate incrementally — start by switching the client initialization to the new `Composio()` constructor with an explicit provider, then migrate individual toolset usages to sessions as you update each agent or workflow.
+
+<Warning>
+  The legacy Python `ComposioToolSet` pattern (importing from `composio_openai`, `composio_anthropic`, etc. directly as the entry point) is deprecated and will be removed in a future major release. Migrate to `Composio(provider=...)` to ensure long-term compatibility. Use `composio.tools.get()` + `composio.tools.execute()` for simple scripts, and `composio.create()` sessions for production multi-user workloads.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Sessions Overview" icon="layer-group" href="/sessions/overview">
+    Deep dive into the session-based API — creation, authorization, tool discovery, and execution.
+  </Card>
+  <Card title="Direct Execution" icon="bolt" href="/guides/direct-execution">
+    When sessions are overkill — use composio.tools.get() and execute() directly.
+  </Card>
+</CardGroup>

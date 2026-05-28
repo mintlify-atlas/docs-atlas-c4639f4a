@@ -1,0 +1,128 @@
+---
+title: 'Authentication in Composio'
+description: 'Composio handles OAuth flows, API key management, and token refresh automatically. Learn how auth configs, connected accounts, and connect links work together.'
+---
+
+Composio abstracts away the complexity of authenticating users with hundreds of external services. Whether a toolkit uses OAuth 2.0, API keys, or basic credentials, you interact with the same small set of primitives — Composio handles redirect flows, token storage, and automatic refresh behind the scenes.
+
+## The three-layer auth model
+
+Every authenticated action in Composio passes through three layers:
+
+| Layer | What it is | Identifier |
+|---|---|---|
+| **Auth Config** | The blueprint that defines *how* to authenticate with a service — which OAuth app to use, which scopes to request, which scheme applies | `ac_…` |
+| **Connected Account** | A per-user credential instance created from an auth config. Stores the actual token/key securely | `ca_…` |
+| **Connect Link** | A short-lived hosted URL Composio generates so users can complete an OAuth flow without you building a redirect server | — |
+
+### Auth Config — the blueprint
+
+An auth config answers the question *"which application authenticates with this service?"*. For most toolkits Composio ships a pre-built managed config so you need zero setup. When you want users to see your brand in the OAuth consent screen, you bring your own OAuth credentials and create a custom auth config.
+
+Auth configs are **reusable** — one config can back thousands of connected accounts across all your users.
+
+### Connected Account — the user credential
+
+When a user completes authentication, Composio creates a connected account (`ca_…`) that holds their encrypted tokens or API key. Every future tool execution automatically resolves the right connected account for the requesting user.
+
+Connected accounts have a **status lifecycle**:
+
+| Status | Meaning |
+|---|---|
+| `INITIALIZING` | OAuth flow started, user has not yet completed the redirect |
+| `ACTIVE` | Credentials are valid and ready for tool execution |
+| `EXPIRED` | Token expired and could not be refreshed automatically |
+| `DELETED` | Account was permanently removed |
+
+### Connect Link — the OAuth entry point
+
+For OAuth-based toolkits, Composio generates a hosted URL you redirect your user to. After the user approves the OAuth consent screen, Composio exchanges the code for tokens and creates an ACTIVE connected account. Your app never handles raw authorization codes or tokens.
+
+## The auth flow, step by step
+
+<Steps>
+  <Step title="Start the flow">
+    Call `toolkits.authorize()` (or `connected_accounts.link()`) with the user's ID and the toolkit slug. Composio creates a `ConnectionRequest` with a `redirect_url`.
+  </Step>
+  <Step title="Send the user to the URL">
+    Redirect or display the `redirect_url` to your user. They are taken to Composio's hosted OAuth page (or your white-labeled app's page if you use a custom auth config).
+  </Step>
+  <Step title="User approves OAuth">
+    The user grants permissions on the provider's consent screen. Composio receives the authorization code callback.
+  </Step>
+  <Step title="Credentials stored">
+    Composio exchanges the code for tokens and persists them as an `ACTIVE` connected account (`ca_…`).
+  </Step>
+  <Step title="Tools execute automatically">
+    On every subsequent tool call for this user, Composio looks up the active connected account and injects credentials transparently — no token management in your application code.
+  </Step>
+</Steps>
+
+## Supported auth schemes
+
+| Scheme | Description | Status after creation |
+|---|---|---|
+| `OAUTH2` | Standard OAuth 2.0 redirect-based flow | `INITIALIZING` → `ACTIVE` |
+| `OAUTH1` | OAuth 1.0a (e.g. Twitter/X) | `INITIALIZING` → `ACTIVE` |
+| `API_KEY` | Static API key passed in a header or query | `ACTIVE` immediately |
+| `BASIC` | Username + password HTTP Basic auth | `ACTIVE` immediately |
+| `BEARER_TOKEN` | Raw bearer token string | `ACTIVE` immediately |
+| `NO_AUTH` | Service requires no authentication | `ACTIVE` immediately |
+| `GOOGLE_SERVICE_ACCOUNT` | GCP service account JSON credentials | `ACTIVE` immediately |
+
+## Quick start — authorizing a user
+
+The fastest path is `toolkits.authorize()`, which auto-creates a managed auth config if one doesn't exist yet and returns a `ConnectionRequest`.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+// Start OAuth — returns a ConnectionRequest with a redirectUrl
+const connectionRequest = await composio.toolkits.authorize('user_123', 'github');
+
+if (connectionRequest.redirectUrl) {
+  console.log('Send the user to:', connectionRequest.redirectUrl);
+}
+
+// Poll until the user completes the OAuth flow (default timeout: 60 s)
+const connectedAccount = await connectionRequest.waitForConnection();
+console.log('Connected account ID:', connectedAccount.id);
+```
+
+```python Python
+import composio
+
+client = composio.Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+# Start OAuth — returns a ConnectionRequest with a redirect_url
+connection_request = client.toolkits.authorize(user_id="user_123", toolkit="github")
+
+if connection_request.redirect_url:
+    print("Send the user to:", connection_request.redirect_url)
+
+# Poll until the user completes the OAuth flow (default timeout: 60 s)
+connected_account = connection_request.wait_for_connection()
+print("Connected account ID:", connected_account.id)
+```
+</CodeGroup>
+
+<Tip>
+  `toolkits.authorize()` is the simplest entry point. For more control — custom callback URLs, multi-account support, or white-labeled OAuth — use `connected_accounts.link()` directly with an explicit auth config ID.
+</Tip>
+
+## Explore further
+
+<CardGroup cols={2}>
+  <Card title="Connected Accounts" icon="link" href="/authentication/connected-accounts">
+    Create, list, update, enable, disable, and delete per-user credential records.
+  </Card>
+  <Card title="Auth Configs" icon="gear" href="/authentication/auth-configs">
+    Configure Composio-managed or custom OAuth applications for any toolkit.
+  </Card>
+  <Card title="White-Label OAuth" icon="paintbrush" href="/authentication/white-labeling">
+    Replace Composio branding with your own app name and logo in OAuth consent screens.
+  </Card>
+</CardGroup>

@@ -1,0 +1,240 @@
+---
+title: 'AI Framework Provider Integrations'
+description: 'Composio providers adapt tools into the format expected by each AI framework. Install the provider for OpenAI, Anthropic, LangChain, Vercel, Mastra, CrewAI, and more.'
+---
+
+Composio tools are framework-agnostic by default — they are fetched as plain JSON schemas and executed via the Composio API. **Providers** are thin adapter packages that wrap those tools into the exact format that each AI framework or agent runtime expects, so you can pass Composio tools directly to your framework's agent loop without any conversion code.
+
+## Provider Types
+
+<CardGroup cols={2}>
+  <Card title="Non-Agentic Providers" icon="file-code">
+    Convert tool schemas into static definitions (e.g. Anthropic `ToolParam`, OpenAI function specs). Your framework calls tools, and you call `provider.execute_tool_call()` or `provider.handle_tool_calls()` to run them. No execution loop is embedded in the provider.
+  </Card>
+  <Card title="Agentic Providers" icon="robot">
+    Embed both the schema **and** the execution callback inside each tool object. The framework's built-in agent loop can call tools autonomously. Providers like `LangchainProvider`, `CrewAIProvider`, and `VercelProvider` fall into this category.
+  </Card>
+</CardGroup>
+
+## TypeScript Providers
+
+Install `@composio/core` as a base dependency alongside any provider package.
+
+| Package | Class | Type | Framework |
+|---------|-------|------|-----------|
+| `@composio/openai` | `OpenAIProvider` | Non-Agentic | OpenAI Chat Completions |
+| `@composio/openai` | `OpenAIResponsesProvider` | Non-Agentic | OpenAI Responses API |
+| `@composio/openai-agents` | `OpenAIAgentsProvider` | Agentic | `@openai/agents` |
+| `@composio/anthropic` | `AnthropicProvider` | Non-Agentic | Anthropic Claude SDK |
+| `@composio/claude-agent-sdk` | `ClaudeAgentSDKProvider` | Agentic | Anthropic Claude Agent SDK |
+| `@composio/vercel` | `VercelProvider` | Agentic | Vercel AI SDK (`ai`) |
+| `@composio/langchain` | `LangchainProvider` | Agentic | LangChain.js |
+| `@composio/llamaindex` | `LlamaindexProvider` | Agentic | LlamaIndex.TS |
+| `@composio/mastra` | `MastraProvider` | Agentic | Mastra |
+| `@composio/google` | `GoogleProvider` | Non-Agentic | Google Generative AI SDK |
+| `@composio/cloudflare` | `CloudflareProvider` | Non-Agentic | Cloudflare Workers AI |
+
+## Python Providers
+
+| Package | Provider Class | Framework |
+|---------|---------------|-----------|
+| `composio-openai` | `OpenAIProvider` | OpenAI Python SDK |
+| `composio-openai-agents` | `OpenAIAgentsProvider` | OpenAI Agents SDK (`agents`) |
+| `composio-anthropic` | `AnthropicProvider` | Anthropic Python SDK |
+| `composio-claude-agent-sdk` | `ClaudeAgentSDKProvider` | Anthropic Claude Agent SDK |
+| `composio-langchain` | `LangchainProvider` | LangChain Python |
+| `composio-langgraph` | `LanggraphProvider` | LangGraph |
+| `composio-crewai` | `CrewAIProvider` | CrewAI |
+| `composio-llamaindex` | `LlamaIndexProvider` | LlamaIndex |
+| `composio-google` | `GoogleProvider` | Google Generative AI Python SDK |
+| `composio-google-adk` | `GoogleAdkProvider` | Google Agent Development Kit |
+| `composio-gemini` | `GeminiProvider` | Google Gemini SDK |
+| `composio-autogen` | `AutogenProvider` | AutoGen |
+
+---
+
+## Usage Examples
+
+### OpenAI Agents SDK
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+import { OpenAIAgentsProvider } from '@composio/openai-agents';
+import { Agent, run } from '@openai/agents';
+
+const composio = new Composio({
+  apiKey: process.env.COMPOSIO_API_KEY,
+  provider: new OpenAIAgentsProvider(),
+});
+
+// Get tools pre-wrapped as @openai/agents Tool objects
+const tools = await composio.tools.get('user-alice', {
+  toolkits: ['github'],
+});
+
+const agent = new Agent({
+  name: 'GitHub Assistant',
+  model: 'gpt-4o',
+  tools,
+});
+
+const result = await run(agent, 'List my open pull requests');
+console.log(result.finalOutput);
+```
+
+```python Python
+import os
+from agents import Agent, Runner
+from composio import Composio
+from composio_openai_agents import OpenAIAgentsProvider
+
+composio = Composio(
+    api_key=os.environ["COMPOSIO_API_KEY"],
+    provider=OpenAIAgentsProvider(),
+)
+
+# Get tools pre-wrapped as FunctionTool objects
+tools = composio.tools.get(user_id="user-alice", toolkits=["github"])
+
+agent = Agent(
+    name="GitHub Assistant",
+    model="gpt-4o",
+    tools=tools,
+)
+
+result = Runner.run_sync(agent, "List my open pull requests")
+print(result.final_output)
+```
+</CodeGroup>
+
+### Vercel AI SDK
+
+```typescript TypeScript
+import { Composio } from '@composio/core';
+import { VercelProvider } from '@composio/vercel';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const composio = new Composio({
+  apiKey: process.env.COMPOSIO_API_KEY,
+  provider: new VercelProvider(),
+});
+
+// Tools come back as a Vercel ToolSet (record of Zod-validated tool objects)
+const tools = await composio.tools.get('user-alice', {
+  toolkits: ['github'],
+});
+
+const { text } = await generateText({
+  model: openai('gpt-4o'),
+  tools,
+  prompt: 'Create a GitHub issue titled "Fix login bug" in my main repo',
+});
+
+console.log(text);
+```
+
+### LangChain
+
+```python Python
+import os
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain_core.prompts import ChatPromptTemplate
+from composio import Composio
+from composio_langchain import LangchainProvider
+
+composio = Composio(
+    api_key=os.environ["COMPOSIO_API_KEY"],
+    provider=LangchainProvider(),
+)
+
+# Tools arrive as LangChain StructuredTool objects
+tools = composio.tools.get(user_id="user-alice", toolkits=["github"])
+
+llm = ChatOpenAI(model="gpt-4o")
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful GitHub assistant."),
+    ("user", "{input}"),
+    ("placeholder", "{agent_scratchpad}"),
+])
+
+agent = create_openai_tools_agent(llm, tools, prompt)
+executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+result = executor.invoke({"input": "Star the composio/composio repository"})
+print(result["output"])
+```
+
+### CrewAI
+
+```python Python
+import os
+from crewai import Agent, Task, Crew
+from composio import Composio
+from composio_crewai import CrewAIProvider
+
+composio = Composio(
+    api_key=os.environ["COMPOSIO_API_KEY"],
+    provider=CrewAIProvider(),
+)
+
+# Tools arrive as CrewAI BaseTool objects
+tools = composio.tools.get(user_id="user-alice", toolkits=["github", "slack"])
+
+researcher = Agent(
+    role="GitHub Analyst",
+    goal="Summarise recent activity in a repository",
+    tools=tools,
+    verbose=True,
+)
+
+task = Task(
+    description="List the 5 most recent commits in composio/composio",
+    agent=researcher,
+    expected_output="A bullet-point summary of commit messages",
+)
+
+crew = Crew(agents=[researcher], tasks=[task])
+result = crew.kickoff()
+print(result)
+```
+
+## Custom Providers
+
+You can build your own provider by extending the appropriate base class:
+
+<CodeGroup>
+```typescript TypeScript
+import { BaseNonAgenticProvider, Tool } from '@composio/core';
+
+export class MyCustomProvider extends BaseNonAgenticProvider<MyToolFormat, MyToolFormat[]> {
+  readonly name = 'my-custom-provider';
+
+  wrapTool(tool: Tool): MyToolFormat {
+    return { name: tool.slug, schema: tool.inputParameters };
+  }
+
+  wrapTools(tools: Tool[]): MyToolFormat[] {
+    return tools.map(t => this.wrapTool(t));
+  }
+}
+```
+
+```python Python
+from composio.core.provider import NonAgenticProvider
+from composio.types import Tool
+
+class MyCustomProvider(NonAgenticProvider[dict, list[dict]], name="my-custom"):
+    def wrap_tool(self, tool: Tool) -> dict:
+        return {"name": tool.slug, "schema": tool.input_parameters}
+
+    def wrap_tools(self, tools) -> list[dict]:
+        return [self.wrap_tool(t) for t in tools]
+```
+</CodeGroup>
+
+<Note>
+  All TypeScript providers require `@composio/core` as a peer dependency. The core package ships `OpenAIProvider` built-in; all other providers are separate packages installed alongside core.
+</Note>

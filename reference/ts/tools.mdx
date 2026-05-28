@@ -1,0 +1,397 @@
+---
+title: 'Tools Class - TypeScript SDK Reference'
+description: 'Reference for the Composio Tools class. Methods to fetch, search, execute, and get raw schemas for tools. Access via composio.tools.'
+---
+
+The `Tools` class manages all tool operations in the Composio SDK — fetching tool schemas from the API, wrapping them in your AI framework's format, executing them, and registering custom tools. It is instantiated automatically and accessed via `composio.tools`.
+
+## Access
+
+```typescript
+import { Composio } from '@composio/core';
+
+const composio = new Composio();
+
+// Access tools via the instance
+const tools = composio.tools;
+```
+
+---
+
+## Methods
+
+### `tools.get()`
+
+Fetches one or more tools and returns them wrapped in the format expected by the configured provider (e.g. OpenAI function-calling objects, Vercel AI `ToolSet`, etc.).
+
+**Overload 1 — fetch by filters:**
+
+```typescript
+const tools = await composio.tools.get(userId, filters, options?)
+```
+
+**Overload 2 — fetch a single tool by slug:**
+
+```typescript
+const tool = await composio.tools.get(userId, slug, options?)
+```
+
+<ParamField body="userId" type="string" required>
+  Your application's identifier for the end user. Used to resolve connected accounts when executing tools.
+</ParamField>
+
+<ParamField body="filters" type="ToolListParams" required>
+  Filter object for fetching a set of tools. Exactly one of `toolkits`, `tools`, `search`, or `authConfigIds` must be present.
+
+  <Expandable title="ToolListParams">
+    <ParamField body="toolkits" type="string[]" optional>
+      Slugs of the toolkits to fetch tools from (e.g. `['github', 'slack']`). Cannot be combined with `tools`.
+    </ParamField>
+    <ParamField body="tools" type="string[]" optional>
+      Explicit tool slugs to fetch (e.g. `['GITHUB_CREATE_ISSUE', 'SLACK_SEND_MESSAGE']`). Cannot be combined with `toolkits`.
+    </ParamField>
+    <ParamField body="search" type="string" optional>
+      Natural-language search query. Returns semantically relevant tools.
+    </ParamField>
+    <ParamField body="scopes" type="string[]" optional>
+      Filter tools by OAuth scopes.
+    </ParamField>
+    <ParamField body="limit" type="number" optional>
+      Maximum number of tools to return.
+    </ParamField>
+    <ParamField body="authConfigIds" type="string[]" optional>
+      Return only tools associated with these auth-config IDs.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="slug" type="string" required>
+  When using the single-tool overload, the tool's unique slug (e.g. `'GITHUB_GET_REPOS'`).
+</ParamField>
+
+<ParamField body="options" type="ProviderOptions" optional>
+  <Expandable title="ProviderOptions">
+    <ParamField body="modifySchema" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, schema }) => Tool` — Transform the raw tool schema before it is wrapped by the provider.
+    </ParamField>
+    <ParamField body="beforeExecute" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, params }) => ToolExecuteParams` — Modify execution arguments before they are sent to the API.
+    </ParamField>
+    <ParamField body="afterExecute" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, result }) => ToolExecuteResponse` — Transform the execution result before it is returned.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<TToolCollection>` — provider-specific tool collection (e.g. `OpenAI.ChatCompletionTool[]`)
+
+```typescript
+// Fetch all GitHub tools
+const githubTools = await composio.tools.get('user_123', {
+  toolkits: ['github'],
+  limit: 10,
+});
+
+// Fetch a specific tool
+const createIssueTool = await composio.tools.get('user_123', 'GITHUB_CREATE_ISSUE');
+
+// Search semantically
+const searchTools = await composio.tools.get('user_123', {
+  search: 'send an email',
+});
+```
+
+---
+
+### `tools.getRawComposioTools()`
+
+Fetches tools from the Composio API in raw (camelCase) format, without provider-specific wrapping. Useful for introspection or building custom tool adapters.
+
+```typescript
+const tools = await composio.tools.getRawComposioTools(query, options?)
+```
+
+<ParamField body="query" type="ToolListParams" required>
+  Same filter object as `tools.get()`. At least one of `toolkits`, `tools`, `search`, or `authConfigIds` is required.
+</ParamField>
+
+<ParamField body="options" type="SchemaModifierOptions" optional>
+  <Expandable title="SchemaModifierOptions">
+    <ParamField body="modifySchema" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, schema }) => Tool` — Transform each tool schema after retrieval.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<Tool[]>`
+
+```typescript
+const rawTools = await composio.tools.getRawComposioTools({
+  toolkits: ['github'],
+  limit: 5,
+});
+
+rawTools.forEach(tool => {
+  console.log(tool.slug, tool.description);
+  console.log(tool.inputParameters);
+});
+```
+
+---
+
+### `tools.getRawComposioToolBySlug()`
+
+Fetches a single tool by its slug and returns it in raw format.
+
+```typescript
+const tool = await composio.tools.getRawComposioToolBySlug(slug, options?)
+```
+
+<ParamField body="slug" type="string" required>
+  The unique tool slug, e.g. `'GITHUB_CREATE_ISSUE'`.
+</ParamField>
+
+<ParamField body="options" type="ToolRetrievalOptions" optional>
+  <Expandable title="ToolRetrievalOptions">
+    <ParamField body="version" type="string" optional>
+      Fetch a specific tool version (e.g. `'20250909_00'`). When omitted, the SDK-level `toolkitVersions` config is used.
+    </ParamField>
+    <ParamField body="modifySchema" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, schema }) => Tool` — Transform the schema after retrieval.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<Tool>`
+
+```typescript
+const tool = await composio.tools.getRawComposioToolBySlug('GITHUB_CREATE_ISSUE');
+console.log(tool.name);
+console.log(tool.inputParameters);
+console.log(tool.availableVersions);
+```
+
+---
+
+### `tools.execute()`
+
+Executes a Composio tool by slug and returns the structured response.
+
+```typescript
+const result = await composio.tools.execute(slug, body, modifiers?)
+```
+
+<ParamField body="slug" type="string" required>
+  The unique tool slug to execute (e.g. `'GITHUB_CREATE_ISSUE'`).
+</ParamField>
+
+<ParamField body="body" type="ToolExecuteParams" required>
+  <Expandable title="ToolExecuteParams">
+    <ParamField body="userId" type="string" required>
+      The end-user identifier.
+    </ParamField>
+    <ParamField body="arguments" type="Record<string, unknown>" optional>
+      Tool-specific input arguments as defined by the tool's `inputParameters` schema.
+    </ParamField>
+    <ParamField body="connectedAccountId" type="string" optional>
+      Pin a specific connected account for execution. Useful when a user has multiple accounts for the same toolkit.
+    </ParamField>
+    <ParamField body="version" type="string" optional>
+      Specific toolkit version to execute (e.g. `'20250909_00'`). Required when the SDK-level `toolkitVersions` resolves to `'latest'` and `dangerouslySkipVersionCheck` is not `true`.
+    </ParamField>
+    <ParamField body="dangerouslySkipVersionCheck" type="boolean" optional>
+      Allow execution against `'latest'` version without pinning. Not recommended for production.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="modifiers" type="ExecuteToolModifiers" optional>
+  <Expandable title="ExecuteToolModifiers">
+    <ParamField body="beforeExecute" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, params }) => ToolExecuteParams` — Mutate the request before it is sent.
+    </ParamField>
+    <ParamField body="afterExecute" type="function" optional>
+      `(params: { toolSlug, toolkitSlug, result }) => ToolExecuteResponse` — Transform the response before it is returned.
+    </ParamField>
+    <ParamField body="beforeFileUpload" type="function" optional>
+      Called before each file is staged during auto-upload (requires `dangerouslyAllowAutoUploadDownloadFiles: true`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<ToolExecuteResponse>`
+
+<ResponseField name="data" type="Record<string, unknown>">
+  The structured output returned by the tool.
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message if the execution failed; `null` on success.
+</ResponseField>
+
+<ResponseField name="successful" type="boolean">
+  `true` when the tool executed without errors.
+</ResponseField>
+
+<ResponseField name="logId" type="string">
+  Composio execution log identifier for debugging and support.
+</ResponseField>
+
+```typescript
+// Recommended: pin a specific version
+const result = await composio.tools.execute('GITHUB_CREATE_ISSUE', {
+  userId:    'user_123',
+  version:   '20250909_00',
+  arguments: {
+    owner: 'composiohq',
+    repo:  'composio',
+    title: 'Bug report from SDK',
+    body:  'Detailed description here.',
+  },
+});
+
+if (result.successful) {
+  console.log('Issue created:', result.data);
+} else {
+  console.error('Failed:', result.error);
+}
+```
+
+---
+
+### `tools.proxyExecute()`
+
+Sends a custom HTTP request to a toolkit's API via Composio's auth layer, without calling a specific named tool.
+
+```typescript
+const response = await composio.tools.proxyExecute(body)
+```
+
+<ParamField body="body" type="ToolProxyParams" required>
+  <Expandable title="ToolProxyParams">
+    <ParamField body="endpoint" type="string" required>
+      The API endpoint path (e.g. `'/repos/owner/repo/issues'`).
+    </ParamField>
+    <ParamField body="method" type="string" required>
+      HTTP method: `'GET'`, `'POST'`, `'PUT'`, `'PATCH'`, or `'DELETE'`.
+    </ParamField>
+    <ParamField body="connectedAccountId" type="string" required>
+      The connected account to use for authentication.
+    </ParamField>
+    <ParamField body="body" type="unknown" optional>
+      Request body for `POST`/`PUT`/`PATCH` requests.
+    </ParamField>
+    <ParamField body="parameters" type="array" optional>
+      Additional query or header parameters as `{ name, in: 'query'|'header', value }` objects.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<ToolProxyResponse>`
+
+```typescript
+const response = await composio.tools.proxyExecute({
+  endpoint:           '/repos/composiohq/composio/issues',
+  method:             'GET',
+  connectedAccountId: 'ca_abc123',
+});
+console.log(response.data);
+```
+
+---
+
+### `tools.getToolsEnum()`
+
+Returns an enumeration of all available tools — used primarily by the CLI. No filtering is applied.
+
+```typescript
+const toolsEnum = await composio.tools.getToolsEnum()
+```
+
+**Returns:** `Promise<ToolRetrieveEnumResponse>`
+
+---
+
+### `tools.createCustomTool()`
+
+Registers an in-process custom tool that can be called alongside built-in Composio tools.
+
+```typescript
+const tool = await composio.tools.createCustomTool(body)
+```
+
+<ParamField body="body" type="CustomToolOptions" required>
+  <Expandable title="CustomToolOptions">
+    <ParamField body="slug" type="string" required>
+      Unique slug for the custom tool (e.g. `'MY_CUSTOM_TOOL'`).
+    </ParamField>
+    <ParamField body="name" type="string" required>
+      Human-readable display name.
+    </ParamField>
+    <ParamField body="description" type="string" required>
+      Description shown to the LLM.
+    </ParamField>
+    <ParamField body="inputParameters" type="ZodSchema" required>
+      Zod schema defining the tool's inputs.
+    </ParamField>
+    <ParamField body="execute" type="function" required>
+      `(input, connectionConfig?, executeToolRequest?) => Promise<{ data: Record<string,unknown> }>` — The tool handler.
+    </ParamField>
+    <ParamField body="toolkitSlug" type="string" optional>
+      Associate the custom tool with an existing toolkit.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<Tool>`
+
+```typescript
+import { z } from 'zod';
+
+await composio.tools.createCustomTool({
+  slug:        'FETCH_INTERNAL_DATA',
+  name:        'Fetch Internal Data',
+  description: 'Fetches data from the internal company API.',
+  inputParameters: z.object({
+    datasetId: z.string().describe('The ID of the dataset to fetch'),
+  }),
+  execute: async (input) => {
+    const data = await myInternalApi.fetch(input.datasetId);
+    return { data: { result: data } };
+  },
+});
+```
+
+---
+
+## Full Example: Fetch and Execute a GitHub Tool
+
+```typescript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({
+  apiKey:         process.env.COMPOSIO_API_KEY,
+  toolkitVersions: { github: '20250909_00' },
+});
+
+async function main() {
+  // 1. Inspect the raw schema
+  const schema = await composio.tools.getRawComposioToolBySlug('GITHUB_CREATE_ISSUE');
+  console.log('Inputs:', JSON.stringify(schema.inputParameters, null, 2));
+
+  // 2. Execute the tool
+  const result = await composio.tools.execute('GITHUB_CREATE_ISSUE', {
+    userId:    'user_123',
+    arguments: {
+      owner: 'composiohq',
+      repo:  'composio',
+      title: 'Test issue from SDK',
+    },
+  });
+
+  console.log('Successful:', result.successful);
+  console.log('Data:', result.data);
+}
+
+main();
+```

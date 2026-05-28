@@ -1,0 +1,233 @@
+---
+title: 'Creating and Managing Trigger Instances'
+description: 'Learn how to create trigger instances, enable and disable them, list active triggers, and subscribe to real-time event streams from connected apps.'
+---
+
+A **trigger instance** binds a trigger type (identified by a slug such as `GITHUB_COMMIT_EVENT`) to a specific connected account, and optionally includes trigger-level configuration (e.g. which repository to watch). Once created, an instance starts firing events for that user's account. You can create many instances — one per user, or one per repository — and manage them independently.
+
+## Creating a Trigger Instance
+
+Use `composio.triggers.create()` to bind a trigger type to a connected account. You can target a specific connected account ID, or let Composio look up the right account for a given user ID automatically.
+
+<CodeGroup>
+```python Python
+from composio import Composio
+
+composio = Composio(api_key="your-api-key")
+
+# Option A — target by connected_account_id
+instance = composio.triggers.create(
+    "GITHUB_COMMIT_EVENT",
+    connected_account_id="ca_abc123",
+    trigger_config={"owner": "my-org", "repo": "my-repo"},
+)
+
+# Option B — let Composio resolve the account for a user
+instance = composio.triggers.create(
+    "GITHUB_COMMIT_EVENT",
+    user_id="user-456",
+    trigger_config={"owner": "my-org", "repo": "my-repo"},
+)
+
+print(instance.trigger_id)   # nano ID of the new trigger instance
+```
+
+```typescript TypeScript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: 'your-api-key' });
+
+// Option A — target by connected account ID
+const instance = await composio.triggers.create(
+  'GITHUB_COMMIT_EVENT',
+  {
+    connectedAccountId: 'ca_abc123',
+    triggerConfig: { owner: 'my-org', repo: 'my-repo' },
+  }
+);
+
+// Option B — resolve account for a user ID
+const instance2 = await composio.triggers.create(
+  'GITHUB_COMMIT_EVENT',
+  {
+    userId: 'user-456',
+    triggerConfig: { owner: 'my-org', repo: 'my-repo' },
+  }
+);
+
+console.log(instance.triggerId);
+```
+</CodeGroup>
+
+<Tip>
+  If you pass `user_id` instead of `connected_account_id`, Composio selects the most recently created connected account for that user and toolkit. If no account exists for the user, a `NoItemsFound` error is raised.
+</Tip>
+
+## Listing Trigger Types
+
+Browse all available trigger definitions, optionally filtered by toolkit:
+
+<CodeGroup>
+```python Python
+# List all trigger types (paginated)
+types = composio.triggers.list(limit=20)
+
+# Filter to a specific toolkit
+github_triggers = composio.triggers.list(toolkit_slugs=["github"])
+
+for t in github_triggers.items:
+    print(t.slug, "-", t.description)
+```
+
+```typescript TypeScript
+// List all trigger types
+const types = await composio.triggers.list({ limit: 20 });
+
+// Filter to a specific toolkit
+const githubTriggers = await composio.triggers.list({
+  toolkitSlugs: ['github'],
+});
+
+for (const t of githubTriggers.items) {
+  console.log(t.slug, '-', t.description);
+}
+```
+</CodeGroup>
+
+## Fetching a Single Trigger Type
+
+```python Python
+trigger_type = composio.triggers.get_type("GITHUB_COMMIT_EVENT")
+print(trigger_type.description)
+print(trigger_type.config_schema)   # JSON schema for trigger_config
+```
+
+## Listing Active Trigger Instances
+
+Query all instances that are currently enabled, with optional filters:
+
+<CodeGroup>
+```python Python
+active = composio.triggers.list_active(
+    trigger_names=["GITHUB_COMMIT_EVENT"],
+    show_disabled=False,
+    limit=50,
+)
+
+for instance in active.items:
+    print(instance.id, instance.status)
+```
+
+```typescript TypeScript
+const active = await composio.triggers.listActive({
+  triggerNames: ['GITHUB_COMMIT_EVENT'],
+  showDisabled: false,
+  limit: 50,
+});
+
+for (const instance of active.items) {
+  console.log(instance.id, instance.status);
+}
+```
+</CodeGroup>
+
+## Enabling, Disabling, and Deleting Instances
+
+<CodeGroup>
+```python Python
+trigger_id = "ti_abc123"
+
+# Enable a previously disabled trigger
+composio.triggers.enable(trigger_id)
+
+# Disable without deleting (events stop firing)
+composio.triggers.disable(trigger_id)
+
+# Permanently delete the instance
+composio.triggers.delete(trigger_id)
+```
+
+```typescript TypeScript
+const triggerId = 'ti_abc123';
+
+// Enable
+await composio.triggers.enable(triggerId);
+
+// Disable
+await composio.triggers.disable(triggerId);
+
+// Delete
+await composio.triggers.delete(triggerId);
+```
+</CodeGroup>
+
+## Real-Time Subscription with Multiple Handlers
+
+A single `TriggerSubscription` object can hold any number of handlers, each with its own filter set. Composio evaluates all registered filters in parallel via a thread pool whenever an event arrives.
+
+```python Python
+from composio import Composio
+
+composio = Composio(api_key="your-api-key")
+
+sub = composio.triggers.subscribe(timeout=15.0)
+
+# Handler 1 — GitHub commits for user A
+@sub.handle(trigger_slug="GITHUB_COMMIT_EVENT", user_id="user-alice")
+def on_alice_commit(event):
+    print(f"[Alice] {event['payload']['message']}")
+
+# Handler 2 — GitHub commits for user B
+@sub.handle(trigger_slug="GITHUB_COMMIT_EVENT", user_id="user-bob")
+def on_bob_commit(event):
+    print(f"[Bob] {event['payload']['message']}")
+
+# Handler 3 — all Slack messages, any user
+@sub.handle(trigger_slug="SLACK_NEW_MESSAGE")
+def on_slack_message(event):
+    channel = event["payload"].get("channel")
+    text    = event["payload"].get("text")
+    print(f"[Slack #{channel}] {text}")
+
+# Block until disconnected or stop() is called
+sub.wait_forever()
+```
+
+### Supported Filter Keys
+
+| Filter key             | Matches against             |
+|------------------------|-----------------------------|
+| `trigger_slug`         | `event["trigger_slug"]`     |
+| `trigger_id`           | `event["metadata"]["id"]`   |
+| `toolkit`              | `event["toolkit_slug"]`     |
+| `user_id`              | `event["user_id"]`          |
+| `auth_config_id`       | Connected account's auth config ID |
+| `connected_account_id` | Connected account's nano ID |
+
+<Tip>
+  Omitting a filter key matches **all** events for that dimension. For example, setting only `trigger_slug="GITHUB_COMMIT_EVENT"` will receive commits from every user who has a GitHub trigger active.
+</Tip>
+
+## Stopping a Subscription
+
+Call `sub.stop()` to disconnect the WebSocket and set the subscription as inactive. This is the recommended approach for graceful shutdown in web servers or test teardown:
+
+```python Python
+import signal
+import sys
+
+composio = Composio(api_key="your-api-key")
+sub = composio.triggers.subscribe()
+
+@sub.handle(trigger_slug="GITHUB_COMMIT_EVENT")
+def on_commit(event):
+    print(event["payload"])
+
+def shutdown(sig, frame):
+    print("Shutting down trigger listener…")
+    sub.stop()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, shutdown)
+sub.wait_forever()
+```

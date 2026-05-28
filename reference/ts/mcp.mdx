@@ -1,0 +1,415 @@
+---
+title: 'MCP Class - TypeScript SDK Reference'
+description: 'Reference for the Composio MCP class. Create, list, update, and delete persistent MCP server configurations. Generate per-user streaming endpoints.'
+---
+
+The `MCP` class manages persistent Model Context Protocol (MCP) server configurations in Composio. Unlike session-scoped MCP endpoints (available via `session.mcp`), these configurations are long-lived and reusable. You can share a single configuration across many users by generating per-user streaming URLs via `mcp.generate()`.
+
+## Access
+
+```typescript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+// Access via composio.mcp
+const mcp = composio.mcp;
+```
+
+---
+
+## Methods
+
+### `mcp.create()`
+
+Creates a new persistent MCP server configuration.
+
+```typescript
+const server = await composio.mcp.create(name, config)
+```
+
+<ParamField body="name" type="string" required>
+  A unique human-readable name for this MCP server configuration.
+</ParamField>
+
+<ParamField body="config" type="MCPConfigCreationParams" required>
+  <Expandable title="MCPConfigCreationParams">
+    <ParamField body="toolkits" type="(string | { toolkit?: string, authConfigId?: string })[]" required>
+      Toolkits to include. Each entry is either a toolkit slug string, or an object with `toolkit` (slug) and/or `authConfigId` fields.
+
+      ```typescript
+      // Simple slugs
+      toolkits: ['github', 'slack']
+
+      // With explicit auth configs
+      toolkits: [
+        { toolkit: 'gmail', authConfigId: 'ac_abc123' },
+        'slack',
+      ]
+      ```
+    </ParamField>
+    <ParamField body="allowedTools" type="string[]" optional>
+      Restrict the server to specific tool slugs. When omitted, all tools for the selected toolkits are available.
+    </ParamField>
+    <ParamField body="manuallyManageConnections" type="boolean" optional>
+      When `false` (the default), Composio injects account-management tools into the MCP server so agents can prompt users to authenticate. Set to `true` to handle connections yourself.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<MCPConfigCreateResponse>`
+
+<ResponseField name="id" type="string">
+  Unique identifier for the created MCP server configuration.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Human-readable name.
+</ResponseField>
+
+<ResponseField name="allowedTools" type="string[]">
+  List of tool slugs enabled on this server.
+</ResponseField>
+
+<ResponseField name="authConfigIds" type="string[]">
+  IDs of the auth configurations linked to this server.
+</ResponseField>
+
+<ResponseField name="MCPUrl" type="string">
+  Base SSE/streaming URL for this MCP server.
+</ResponseField>
+
+<ResponseField name="commands.claude" type="string">
+  One-line configuration snippet for the Claude desktop client.
+</ResponseField>
+
+<ResponseField name="commands.cursor" type="string">
+  One-line configuration snippet for Cursor.
+</ResponseField>
+
+<ResponseField name="commands.windsurf" type="string">
+  One-line configuration snippet for Windsurf.
+</ResponseField>
+
+<ResponseField name="generate" type="(userId: string) => Promise<MCPServerInstance>">
+  Convenience method to generate a per-user MCP instance for this server. Equivalent to calling `mcp.generate(userId, server.id)`.
+</ResponseField>
+
+```typescript
+const server = await composio.mcp.create('my-dev-tools', {
+  toolkits:    ['github', 'slack'],
+  allowedTools: ['GITHUB_CREATE_ISSUE', 'SLACK_SEND_MESSAGE'],
+  manuallyManageConnections: false,
+});
+
+console.log('Server ID:',  server.id);
+console.log('MCP URL:',    server.MCPUrl);
+console.log('Claude cmd:', server.commands.claude);
+```
+
+---
+
+### `mcp.list()`
+
+Lists all MCP server configurations with optional filtering and pagination.
+
+```typescript
+const result = await composio.mcp.list(options?)
+```
+
+<ParamField body="options" type="MCPListParams" optional>
+  <Expandable title="MCPListParams">
+    <ParamField body="page" type="number" optional>
+      1-based page number. Defaults to `1`.
+    </ParamField>
+    <ParamField body="limit" type="number" optional>
+      Items per page. Defaults to `10`.
+    </ParamField>
+    <ParamField body="toolkits" type="string[]" optional>
+      Filter by toolkit slugs.
+    </ParamField>
+    <ParamField body="authConfigs" type="string[]" optional>
+      Filter by auth-config IDs.
+    </ParamField>
+    <ParamField body="name" type="string" optional>
+      Partial-match filter on server name.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<MCPListResponse>`
+
+<ResponseField name="items" type="MCPItem[]">
+  Array of MCP server configurations on the current page.
+</ResponseField>
+
+<ResponseField name="currentPage" type="number">
+  The current page number.
+</ResponseField>
+
+<ResponseField name="totalPages" type="number">
+  Total number of pages.
+</ResponseField>
+
+```typescript
+// List all servers
+const { items, totalPages } = await composio.mcp.list({});
+console.log(`Found ${items.length} servers across ${totalPages} pages`);
+
+// Filter by toolkit
+const githubServers = await composio.mcp.list({ toolkits: ['github'] });
+
+// Search by name
+const myServers = await composio.mcp.list({ name: 'dev-tools' });
+```
+
+---
+
+### `mcp.get()`
+
+Retrieves a single MCP server configuration by its ID.
+
+```typescript
+const server = await composio.mcp.get(serverId)
+```
+
+<ParamField body="serverId" type="string" required>
+  The unique ID of the MCP server configuration (e.g. `'mcp_12345'`).
+</ParamField>
+
+**Returns:** `Promise<MCPItem>`
+
+<ResponseField name="id" type="string">
+  Unique identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Human-readable name.
+</ResponseField>
+
+<ResponseField name="allowedTools" type="string[]">
+  Enabled tool slugs.
+</ResponseField>
+
+<ResponseField name="authConfigIds" type="string[]">
+  Linked auth-config IDs.
+</ResponseField>
+
+<ResponseField name="toolkits" type="string[]">
+  Toolkit slugs included in this server.
+</ResponseField>
+
+<ResponseField name="toolkitIcons" type="Record<string, string>">
+  Icon URLs keyed by toolkit slug.
+</ResponseField>
+
+<ResponseField name="serverInstanceCount" type="number">
+  Number of active per-user instances for this configuration.
+</ResponseField>
+
+<ResponseField name="MCPUrl" type="string">
+  Base SSE URL for the server.
+</ResponseField>
+
+<ResponseField name="commands" type="{ claude: string, cursor: string, windsurf: string }">
+  Client setup commands.
+</ResponseField>
+
+```typescript
+const server = await composio.mcp.get('mcp_12345');
+
+console.log(server.name);
+console.log(server.serverInstanceCount, 'active instances');
+console.log(server.commands.cursor);
+```
+
+---
+
+### `mcp.update()`
+
+Updates an existing MCP server configuration. Only the fields you provide are changed.
+
+```typescript
+const updated = await composio.mcp.update(serverId, config)
+```
+
+<ParamField body="serverId" type="string" required>
+  The ID of the MCP server to update.
+</ParamField>
+
+<ParamField body="config" type="MCPUpdateParams" required>
+  <Expandable title="MCPUpdateParams">
+    <ParamField body="name" type="string" optional>
+      New name for the server.
+    </ParamField>
+    <ParamField body="toolkits" type="(string | { toolkit?: string, authConfigId?: string, allowedTools?: string[] })[]" optional>
+      Updated toolkit list. Replaces the existing configuration entirely — not merged.
+    </ParamField>
+    <ParamField body="allowedTools" type="string[]" optional>
+      Updated allowed tool slugs.
+    </ParamField>
+    <ParamField body="manuallyManageConnections" type="boolean" optional>
+      Update the connection-management mode.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<MCPItem>`
+
+```typescript
+const updated = await composio.mcp.update('mcp_12345', {
+  name:         'Updated Dev Tools',
+  allowedTools: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS', 'SLACK_SEND_MESSAGE'],
+});
+
+console.log('Updated:', updated.name);
+console.log('Tools:',   updated.allowedTools);
+```
+
+---
+
+### `mcp.delete()`
+
+Permanently deletes an MCP server configuration. This operation is irreversible.
+
+```typescript
+const result = await composio.mcp.delete(serverId)
+```
+
+<ParamField body="serverId" type="string" required>
+  The ID of the MCP server configuration to delete.
+</ParamField>
+
+**Returns:** `Promise<{ id: string, deleted: boolean }>`
+
+<ResponseField name="id" type="string">
+  The deleted server's ID.
+</ResponseField>
+
+<ResponseField name="deleted" type="boolean">
+  `true` when the server was successfully deleted.
+</ResponseField>
+
+```typescript
+const { id, deleted } = await composio.mcp.delete('mcp_12345');
+
+if (deleted) {
+  console.log(`Server ${id} deleted successfully.`);
+}
+```
+
+---
+
+### `mcp.generate()`
+
+Generates a per-user streaming MCP server instance from an existing configuration. The returned URL is scoped to the specified user and can be passed directly to any MCP client.
+
+```typescript
+const instance = await composio.mcp.generate(userId, mcpConfigId, options?)
+```
+
+<ParamField body="userId" type="string" required>
+  Your application's stable identifier for the end user.
+</ParamField>
+
+<ParamField body="mcpConfigId" type="string" required>
+  The ID of the MCP server configuration to instantiate.
+</ParamField>
+
+<ParamField body="options" type="MCPGetInstanceParams" optional>
+  <Expandable title="MCPGetInstanceParams">
+    <ParamField body="manuallyManageConnections" type="boolean" optional>
+      Override the server-level connection management setting for this instance. Defaults to the server's configured value.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `Promise<MCPServerInstance>`
+
+<ResponseField name="id" type="string">
+  Configuration ID this instance was generated from.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Server name.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Per-user streaming HTTP URL for this MCP instance.
+</ResponseField>
+
+<ResponseField name="type" type="'streamable_http'">
+  Transport type — always `'streamable_http'`.
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  The user this instance is scoped to.
+</ResponseField>
+
+<ResponseField name="allowedTools" type="string[]">
+  Tool slugs available on this instance.
+</ResponseField>
+
+<ResponseField name="authConfigs" type="string[]">
+  Auth-config IDs linked to this instance.
+</ResponseField>
+
+```typescript
+const instance = await composio.mcp.generate('user_123', 'mcp_12345');
+
+console.log('MCP URL:', instance.url);
+// → https://mcp.composio.dev/...?token=...
+```
+
+---
+
+## Full Example
+
+```typescript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+async function setupMCPServer(userId: string) {
+  // 1. Create a persistent MCP configuration
+  const server = await composio.mcp.create('team-tools', {
+    toolkits:    ['github', 'slack', 'gmail'],
+    allowedTools: [
+      'GITHUB_CREATE_ISSUE',
+      'GITHUB_LIST_REPOS',
+      'SLACK_SEND_MESSAGE',
+      'GMAIL_SEND_EMAIL',
+    ],
+    manuallyManageConnections: false,
+  });
+
+  console.log('Server created:', server.id);
+  console.log('Claude setup:',  server.commands.claude);
+  console.log('Cursor setup:',  server.commands.cursor);
+
+  // 2. Generate a per-user instance
+  const instance = await server.generate(userId);
+  // — or equivalently —
+  // const instance = await composio.mcp.generate(userId, server.id);
+
+  console.log('User MCP URL:', instance.url);
+
+  // 3. List all servers
+  const { items } = await composio.mcp.list({ toolkits: ['github'] });
+  console.log('GitHub servers:', items.map(s => s.name));
+
+  // 4. Update the server
+  await composio.mcp.update(server.id, {
+    name: 'Updated Team Tools',
+  });
+
+  // 5. Clean up (optional)
+  // await composio.mcp.delete(server.id);
+
+  return instance.url;
+}
+
+setupMCPServer('user_123').then(url => {
+  console.log('Ready to connect:', url);
+});
+```

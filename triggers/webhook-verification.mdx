@@ -1,0 +1,168 @@
+---
+title: 'Verifying Composio Webhook Signatures'
+description: 'Validate that webhook payloads from Composio are authentic using HMAC-SHA256 signature verification. Composio supports V1, V2, and V3 signature formats.'
+---
+
+When Composio forwards a trigger event to your server as an HTTP POST, any publicly reachable endpoint could receive crafted requests pretending to come from Composio. Signature verification lets you cryptographically confirm that every payload was genuinely sent by Composio and has not been tampered with in transit.
+
+## Why Verify Webhooks?
+
+- **Authenticity** — Only Composio, holding your webhook secret, can produce a valid HMAC-SHA256 signature.
+- **Integrity** — Any modification to the payload after signing will cause the signature check to fail.
+- **Freshness** — Timestamp validation rejects replayed requests older than a configurable tolerance window (default 5 minutes).
+
+## How HMAC-SHA256 Signing Works
+
+Composio constructs a signing string from three header values:
+
+```
+{webhook-id}.{webhook-timestamp}.{raw-request-body}
+```
+
+This string is signed with your webhook secret using HMAC-SHA256, then base64-encoded and prefixed with `v1,` to produce the `webhook-signature` header value.
+
+## Verification Method
+
+Call `composio.triggers.verify_webhook()` inside your endpoint handler. On success it returns a `VerifyWebhookResult`; on failure it raises `WebhookSignatureVerificationError`.
+
+```python Python
+result = composio.triggers.verify_webhook(
+    id=request.headers["webhook-id"],            # "msg_xxx" style ID
+    payload=request.get_data(as_text=True),      # Raw request body (do not parse first)
+    secret=os.environ["COMPOSIO_WEBHOOK_SECRET"],
+    signature=request.headers["webhook-signature"],   # "v1,<base64>" format
+    timestamp=request.headers["webhook-timestamp"],   # Unix seconds as string
+    tolerance=300,                               # Reject payloads older than 5 minutes
+)
+
+# result["version"]     → WebhookVersion.V1 / V2 / V3
+# result["payload"]     → TriggerEvent (normalised, identical structure regardless of version)
+# result["raw_payload"] → The original parsed JSON from the request body
+```
+
+### Parameters
+
+| Parameter   | Type  | Description |
+|-------------|-------|-------------|
+| `id`        | `str` | Value of the `webhook-id` header (format: `msg_xxx`) |
+| `payload`   | `str` | **Raw** request body as a string — must not be decoded/re-serialised |
+| `secret`    | `str` | Your webhook signing secret from the Composio dashboard |
+| `signature` | `str` | Value of the `webhook-signature` header (format: `v1,<base64>`) |
+| `timestamp` | `str` | Value of the `webhook-timestamp` header (Unix seconds) |
+| `tolerance` | `int` | Maximum allowed age in seconds. Set to `0` to disable. Default: `300` |
+
+## Supported Payload Versions
+
+Composio normalises all three historical payload formats into the same `TriggerEvent` structure, so your handler code does not need to branch on the version.
+
+| Version | Identifying Fields | Notes |
+|---------|--------------------|-------|
+| **V1**  | `trigger_name`, `connection_id`, `trigger_id`, `payload` | Legacy format; `user_id` and `toolkit_slug` are empty strings after normalisation |
+| **V2**  | `type`, `timestamp`, `data.connection_id` | Intermediate format with nested `data` envelope |
+| **V3**  | `type` starting with `composio.`, `metadata` dict, `id`, `data` | Current format; also covers non-trigger events such as `composio.connected_account.expired` |
+
+## FastAPI Example
+
+```python Python
+import os
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
+from composio import Composio
+from composio.exceptions import WebhookSignatureVerificationError
+
+app = FastAPI()
+composio = Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+@app.post("/webhook/composio")
+async def composio_webhook(request: Request):
+    # Read the raw bytes BEFORE any JSON parsing
+    raw_body = await request.body()
+
+    try:
+        result = composio.triggers.verify_webhook(
+            id=request.headers["webhook-id"],
+            payload=raw_body.decode("utf-8"),
+            secret=os.environ["COMPOSIO_WEBHOOK_SECRET"],
+            signature=request.headers["webhook-signature"],
+            timestamp=request.headers["webhook-timestamp"],
+            tolerance=300,
+        )
+    except WebhookSignatureVerificationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+
+    event = result["payload"]   # TriggerEvent
+    print(f"Trigger: {event['trigger_slug']} | User: {event['user_id']}")
+    print(f"Payload: {event['payload']}")
+
+    return JSONResponse({"status": "ok"})
+```
+
+## Express (TypeScript) Example
+
+```typescript TypeScript
+import express, { Request, Response } from 'express';
+import { Composio } from '@composio/core';
+
+const app = express();
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY! });
+
+// Use express.raw() to preserve the raw body buffer — do NOT use express.json() here
+app.post(
+  '/webhook/composio',
+  express.raw({ type: 'application/json' }),
+  async (req: Request, res: Response) => {
+    const rawBody = (req.body as Buffer).toString('utf8');
+
+    try {
+      const result = await composio.triggers.verifyWebhook({
+        id: req.headers['webhook-id'] as string,
+        payload: rawBody,
+        secret: process.env.COMPOSIO_WEBHOOK_SECRET!,
+        signature: req.headers['webhook-signature'] as string,
+        timestamp: req.headers['webhook-timestamp'] as string,
+        tolerance: 300,
+      });
+
+      const event = result.payload;
+      console.log(`Trigger: ${event.triggerSlug} | User: ${event.userId}`);
+      console.log('Payload:', event.payload);
+
+      res.json({ status: 'ok' });
+    } catch (err) {
+      console.error('Webhook verification failed:', err);
+      res.status(401).json({ error: 'Unauthorized' });
+    }
+  }
+);
+
+app.listen(3000, () => console.log('Listening on :3000'));
+```
+
+## Error Reference
+
+| Exception | When raised |
+|-----------|-------------|
+| `WebhookSignatureVerificationError` | Signature does not match, no `v1,` prefix found, missing headers, or timestamp outside tolerance |
+| `WebhookPayloadError` | Payload is not valid JSON, or does not match any known V1/V2/V3 structure |
+
+<Warning>
+  Always read the raw request body **before** any JSON parsing middleware runs. Frameworks like Express and FastAPI may re-serialise the body in a slightly different way (different whitespace or key ordering), which changes the bytes and breaks the HMAC check. Use `express.raw()` in Express and `await request.body()` in FastAPI.
+</Warning>
+
+## Timestamp Tolerance
+
+The `tolerance` parameter (default `300` seconds = 5 minutes) controls how stale a webhook is allowed to be. Composio computes `abs(current_unix_time - webhook_timestamp)` and raises `WebhookSignatureVerificationError` if it exceeds the threshold.
+
+Set `tolerance=0` to disable timestamp validation entirely — useful in test environments where you replay saved payloads.
+
+```python Python
+# Disable timestamp checking for local testing
+result = composio.triggers.verify_webhook(
+    id="msg_test",
+    payload=saved_payload,
+    secret="test-secret",
+    signature="v1,<sig>",
+    timestamp="1700000000",
+    tolerance=0,   # skip age check
+)
+```

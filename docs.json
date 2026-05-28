@@ -1,64 +1,120 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "Composio",
+  "theme": "luma",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#040404",
+    "light": "#848484",
+    "dark": "#e8e8e5"
   },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": ["index", "quickstart"],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
+  "favicon": "https://media.brand.dev/b5023ac5-c189-407d-8d87-9cdc0700672f.png",
   "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "light": "https://media.brand.dev/6c4631ad-acab-46ec-a163-75428cfc2431.svg",
+    "dark": "https://media.brand.dev/cc5f4726-d980-4724-889b-b2322ec858c7.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/ComposioHQ/composio"
     }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/ComposioHQ/composio"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "how-it-works"
+            ]
+          },
+          {
+            "group": "Sessions & Tools",
+            "pages": [
+              "sessions/overview",
+              "sessions/configuring-sessions",
+              "sessions/tools-and-toolkits",
+              "sessions/modifiers",
+              "sessions/workbench"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "authentication/overview",
+              "authentication/connected-accounts",
+              "authentication/auth-configs",
+              "authentication/white-labeling"
+            ]
+          },
+          {
+            "group": "Triggers",
+            "pages": [
+              "triggers/overview",
+              "triggers/managing-triggers",
+              "triggers/webhook-verification"
+            ]
+          },
+          {
+            "group": "MCP & Integrations",
+            "pages": [
+              "mcp/overview",
+              "mcp/mcp-server",
+              "providers/overview"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/custom-tools",
+              "guides/direct-execution",
+              "guides/proxy-execute",
+              "guides/cli",
+              "guides/migration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "reference/ts/composio",
+              "reference/ts/tools",
+              "reference/ts/tool-router",
+              "reference/ts/mcp",
+              "reference/ts/providers"
+            ]
+          },
+          {
+            "group": "Python SDK",
+            "pages": [
+              "reference/python/composio",
+              "reference/python/tools",
+              "reference/python/tool-router",
+              "reference/python/triggers",
+              "reference/python/providers"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "reference/cli/overview",
+              "reference/cli/commands"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

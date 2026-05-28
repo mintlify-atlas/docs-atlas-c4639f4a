@@ -1,24 +1,149 @@
 ---
-title: "Introduction"
-description: "Welcome to your Mintlify project"
+title: "Composio: AI Agent Tool Integrations"
+description: "Composio gives your AI agents access to 1,000+ tool integrations with built-in auth, per-user sessions, triggers, and adapters for every major AI framework."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Composio is an SDK for TypeScript and Python that connects AI agents to external services — GitHub, Slack, Gmail, Notion, and 1,000+ more — without writing custom integrations. It handles OAuth flows, API key management, per-user sessions, real-time triggers, and MCP server generation so you can focus on building agents that get things done.
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages. This card links to the components overview in the Mintlify documentation with information about every available component.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first AI agent with Composio tools in under 5 minutes.
+  </Card>
+  <Card title="How It Works" icon="lightbulb" href="/how-it-works">
+    Understand sessions, tool routing, and the core Composio model.
+  </Card>
+  <Card title="Provider Integrations" icon="puzzle-piece" href="/providers/overview">
+    Connect Composio to OpenAI, Anthropic, LangChain, Vercel AI, and more.
+  </Card>
+  <Card title="API Reference" icon="code" href="/reference/ts/composio">
+    Full TypeScript and Python SDK reference with all parameters and types.
+  </Card>
+</CardGroup>
 
-  Edit this card to link to a different page in your project when you add more content.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file. This card links to the settings overview page in the Mintlify documentation with information about how to configure your project.
+## Why Composio?
 
-  Edit this card to link to a different page in your project when you add more content.
-</Card>
+Building AI agents that interact with real-world apps requires solving auth, per-user isolation, tool discovery, and execution — before you even write agent logic. Composio solves all of this out of the box.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={3}>
+  <Card title="1,000+ Integrations" icon="grid">
+    Pre-built tools for GitHub, Slack, Gmail, Notion, Linear, Jira, and hundreds more — ready to use immediately.
+  </Card>
+  <Card title="Auth Handled for You" icon="lock">
+    Composio manages OAuth flows, token refresh, and credential storage per user. No auth plumbing required.
+  </Card>
+  <Card title="Every AI Framework" icon="network-wired">
+    Works with OpenAI, Anthropic, LangChain, CrewAI, Vercel AI SDK, Mastra, Cloudflare Workers, and more.
+  </Card>
+  <Card title="Session Isolation" icon="user-shield">
+    Each user gets their own session with their own connected accounts, tools, and execution context.
+  </Card>
+  <Card title="MCP Native" icon="server">
+    Every session exposes a streaming HTTP MCP URL — compatible with any MCP client instantly.
+  </Card>
+  <Card title="Real-Time Triggers" icon="bolt">
+    Subscribe to events from connected apps — commits, messages, tickets — and react in real time.
+  </Card>
+</CardGroup>
+
+## Get Started
+
+<Steps>
+  <Step title="Install the SDK">
+    Install the Composio core package and your framework's provider adapter.
+
+    <CodeGroup>
+    ```bash npm
+    npm install @composio/core @composio/openai-agents
+    ```
+    ```bash pip
+    pip install composio composio-openai-agents
+    ```
+    </CodeGroup>
+  </Step>
+  <Step title="Initialize Composio">
+    Create a `Composio` instance with your API key and the provider for your AI framework.
+
+    <CodeGroup>
+    ```typescript TypeScript
+    import { Composio } from '@composio/core';
+    import { OpenAIAgentsProvider } from '@composio/openai-agents';
+
+    const composio = new Composio({
+      apiKey: process.env.COMPOSIO_API_KEY,
+      provider: new OpenAIAgentsProvider(),
+    });
+    ```
+    ```python Python
+    from composio import Composio
+    from composio_openai_agents import OpenAIAgentsProvider
+
+    composio = Composio(
+        api_key=os.environ["COMPOSIO_API_KEY"],
+        provider=OpenAIAgentsProvider(),
+    )
+    ```
+    </CodeGroup>
+  </Step>
+  <Step title="Create a session and get tools">
+    Create a session for your user and retrieve provider-wrapped tools ready for your agent.
+
+    <CodeGroup>
+    ```typescript TypeScript
+    const session = await composio.create('user@example.com', {
+      toolkits: ['github', 'slack'],
+    });
+
+    const tools = await session.tools();
+    ```
+    ```python Python
+    session = composio.create(
+        user_id="user@example.com",
+        toolkits=["github", "slack"],
+    )
+
+    tools = session.tools()
+    ```
+    </CodeGroup>
+  </Step>
+  <Step title="Run your agent">
+    Pass the tools to your agent. Composio handles execution, auth, and result formatting automatically.
+
+    <CodeGroup>
+    ```typescript TypeScript
+    import { Agent, run } from '@openai/agents';
+
+    const agent = new Agent({ name: 'My Agent', tools });
+    const result = await run(agent, 'Create a GitHub issue for the bug I found');
+    ```
+    ```python Python
+    from agents import Agent, Runner
+
+    agent = Agent(name="My Agent", tools=tools)
+    result = await Runner.run(starting_agent=agent, input="Create a GitHub issue for the bug I found")
+    ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Explore the Docs
+
+<CardGroup cols={2}>
+  <Card title="Sessions & Tools" icon="layer-group" href="/sessions/overview">
+    Learn how sessions work, how to configure tool access, and how to use modifiers to shape tool behavior.
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication/overview">
+    Manage OAuth flows, connected accounts, auth configs, and white-label the connection experience.
+  </Card>
+  <Card title="Triggers & Webhooks" icon="bell" href="/triggers/overview">
+    Subscribe to real-time events from connected apps and verify webhook payloads.
+  </Card>
+  <Card title="MCP Server" icon="plug" href="/mcp/overview">
+    Use Composio as a Model Context Protocol server with any MCP-compatible client or IDE.
+  </Card>
+  <Card title="Custom Tools" icon="wrench" href="/guides/custom-tools">
+    Build and register your own tools alongside Composio's built-in integrations.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/guides/cli">
+    Manage connections, search tools, generate typed code stubs, and more from the command line.
+  </Card>
+</CardGroup>

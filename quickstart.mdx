@@ -1,47 +1,190 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: 'Get started with Composio'
+description: 'Learn how to install Composio, create a session, connect a toolkit, and run your first AI agent tool call in under 5 minutes.'
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide walks you through the fastest path from zero to a working AI agent that can perform real actions — creating a GitHub issue — using Composio.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Install packages">
+    Install the core SDK and the provider adapter for your AI framework. The examples below use **OpenAI Agents**; swap the provider package for whichever framework you prefer.
 
-    ```bash
-    npm install your-package
-    ```
+    <CodeGroup>
+      ```bash npm
+      npm install @composio/core @composio/openai-agents @openai/agents
+      ```
+
+      ```bash yarn
+      yarn add @composio/core @composio/openai-agents @openai/agents
+      ```
+
+      ```bash pnpm
+      pnpm add @composio/core @composio/openai-agents @openai/agents
+      ```
+
+      ```bash pip
+      pip install composio composio-openai-agents openai-agents
+      ```
+    </CodeGroup>
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
+  <Step title="Get your API key">
+    Sign up or log in at [composio.dev](https://composio.dev) and copy your API key from the dashboard.
+
+    Set it as an environment variable so the SDK picks it up automatically:
+
+    <CodeGroup>
+      ```bash macOS / Linux
+      export COMPOSIO_API_KEY="your-api-key-here"
+      ```
+
+      ```powershell Windows PowerShell
+      $env:COMPOSIO_API_KEY = "your-api-key-here"
+      ```
+    </CodeGroup>
+
+    <Note>
+      You can also pass the key directly to the constructor: `new Composio({ apiKey: '...' })` (TypeScript) or `Composio(api_key='...')` (Python). Using an environment variable is recommended so secrets stay out of source code.
+    </Note>
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
 
-    ```bash
-    your-cli start
-    ```
+  <Step title="Initialize Composio">
+    Create a `Composio` instance and attach a provider. The provider controls how tool schemas are formatted for your chosen AI framework.
+
+    <CodeGroup>
+      ```typescript TypeScript
+      import { Composio } from '@composio/core';
+      import { OpenAIAgentsProvider } from '@composio/openai-agents';
+
+      const composio = new Composio({
+        provider: new OpenAIAgentsProvider(),
+        // apiKey: 'your-api-key', // or set COMPOSIO_API_KEY env var
+      });
+      ```
+
+      ```python Python
+      from composio import Composio
+      from composio_openai_agents import OpenAIAgentsProvider
+
+      composio = Composio(
+          provider=OpenAIAgentsProvider(),
+          # api_key="your-api-key",  # or set COMPOSIO_API_KEY env var
+      )
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Create a session and fetch tools">
+    A **session** is an ephemeral, per-user context that scopes tool access and authentication. Pass a stable `userId` (any string that identifies your end-user) and the list of toolkits you want to enable.
+
+    <CodeGroup>
+      ```typescript TypeScript
+      // Create a session scoped to this user and the GitHub toolkit
+      const session = await composio.create('user@acme.org', {
+        toolkits: ['github'],
+      });
+
+      // Fetch tools wrapped in the format OpenAI Agents expects
+      const tools = await session.tools();
+      ```
+
+      ```python Python
+      # Create a session scoped to this user and the GitHub toolkit
+      session = composio.create(
+          user_id='user@acme.org',
+          toolkits=['github'],
+      )
+
+      # Fetch tools wrapped in the format OpenAI Agents expects
+      tools = session.tools()
+      ```
+    </CodeGroup>
+
+    <Tip>
+      Tool slugs follow the `TOOLKIT_ACTION` pattern — all uppercase, toolkit name first, then the action name. For example, `GITHUB_CREATE_ISSUE`, `SLACK_SEND_MESSAGE`, or `GMAIL_SEARCH_EMAILS`. You can filter by individual slugs using the `tools` key inside the session config.
+    </Tip>
+  </Step>
+
+  <Step title="Run your agent">
+    Pass the retrieved tools to your agent and run it. Composio handles routing each tool call to the correct API, injecting the user's credentials automatically.
+
+    <CodeGroup>
+      ```typescript TypeScript
+      import { Composio } from '@composio/core';
+      import { OpenAIAgentsProvider } from '@composio/openai-agents';
+      import { Agent, run } from '@openai/agents';
+
+      const composio = new Composio({
+        provider: new OpenAIAgentsProvider(),
+      });
+
+      const session = await composio.create('user@acme.org', {
+        toolkits: ['github'],
+      });
+
+      const tools = await session.tools();
+
+      const agent = new Agent({
+        name: 'GitHub Agent',
+        instructions: 'You are a helpful GitHub assistant.',
+        tools,
+      });
+
+      const result = await run(
+        agent,
+        'Create a GitHub issue titled "Test from Composio" in my repo.',
+      );
+
+      console.log(result.finalOutput);
+      ```
+
+      ```python Python
+      import asyncio
+      from composio import Composio
+      from composio_openai_agents import OpenAIAgentsProvider
+      from agents import Agent, Runner
+
+      composio = Composio(provider=OpenAIAgentsProvider())
+
+      session = composio.create(
+          user_id='user@acme.org',
+          toolkits=['github'],
+      )
+
+      tools = session.tools()
+
+      agent = Agent(
+          name='GitHub Agent',
+          instructions='You are a helpful GitHub assistant.',
+          tools=tools,
+      )
+
+      async def main():
+          result = await Runner.run(
+              starting_agent=agent,
+              input='Create a GitHub issue titled "Test from Composio" in my repo.',
+          )
+          print(result.final_output)
+
+      asyncio.run(main())
+      ```
+    </CodeGroup>
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+---
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+## Next Steps
+
+<Note>
+  The examples above use the OpenAI Agents provider. Composio supports many more AI frameworks — each with its own provider package. See [Providers](/providers/overview) for the full list and framework-specific setup guides.
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="How It Works" icon="circle-info" href="/how-it-works">
+    Learn about sessions, tool routing, auth configs, connected accounts, triggers, and MCP in depth.
+  </Card>
+  <Card title="Providers" icon="plug" href="/providers/overview">
+    Browse all supported AI frameworks and swap the provider for your stack.
+  </Card>
+</CardGroup>

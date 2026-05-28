@@ -1,0 +1,257 @@
+---
+title: 'Building Custom Tools and Toolkits'
+description: 'Define your own tools with Pydantic or Zod schemas and register them alongside Composio built-in integrations in a session for your agents to use.'
+---
+
+Custom tools let you extend Composio sessions with in-process logic — local file operations, database queries, internal APIs — while keeping a single, consistent interface for your agent. They execute in your application process and appear alongside remote Composio tools in the same session, so agents can freely mix built-in and custom tools within one conversation turn.
+
+## Defining a custom tool
+
+Describe the tool's inputs with a Pydantic `BaseModel` (Python) or a Zod `z.object()` schema (TypeScript), provide a `slug`, `name`, `description`, and an `execute` function. The SDK wraps your return value into the standard `{data, error, successful}` response automatically.
+
+<CodeGroup>
+```python Python
+from pydantic import BaseModel, Field
+from composio import Composio
+
+composio = Composio()
+
+class SearchFilesInput(BaseModel):
+    pattern: str = Field(description="Glob pattern to search for")
+    directory: str = Field(description="Directory to search in", default=".")
+
+@composio.experimental.tool()
+def search_files(input: SearchFilesInput, ctx):
+    """Search for files matching a pattern in a directory."""
+    import glob
+    matches = glob.glob(f"{input.directory}/**/{input.pattern}", recursive=True)
+    return {"matches": matches, "count": len(matches)}
+
+# Register with a session
+session = composio.create(
+    user_id="user_123",
+    experimental={
+        "custom_tools": [search_files],
+    },
+)
+```
+
+```typescript TypeScript
+import { Composio, experimental_createTool } from '@composio/core';
+import { z } from 'zod';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const searchFiles = experimental_createTool('SEARCH_FILES', {
+  name: 'Search Files',
+  description: 'Search for files matching a pattern in a directory.',
+  inputParams: z.object({
+    pattern: z.string().describe('Glob pattern to search for'),
+    directory: z.string().describe('Directory to search in').default('.'),
+  }),
+  execute: async (input) => {
+    const { glob } = await import('glob');
+    const matches = await glob(`${input.directory}/**/${input.pattern}`, { nodir: true });
+    return { matches, count: matches.length };
+  },
+});
+
+// Register with a session
+const session = await composio.create('user_123', {
+  experimental: {
+    customTools: [searchFiles],
+  },
+});
+```
+</CodeGroup>
+
+<Note>
+  Custom tool slugs are automatically prefixed with `LOCAL_` when exposed to the agent. A slug of `SEARCH_FILES` becomes `LOCAL_SEARCH_FILES`. The `LOCAL_` prefix is reserved — do not include it in your own slug.
+</Note>
+
+## Using SessionContext
+
+The `ctx` (or `SessionContext` in TypeScript) parameter injected into your execute function lets custom tools call other Composio tools or proxy authenticated HTTP requests, all within the same session.
+
+<CodeGroup>
+```python Python
+from pydantic import BaseModel, Field
+from composio import Composio, SessionContext
+
+composio = Composio()
+
+class CreateIssueInput(BaseModel):
+    title: str = Field(description="Issue title")
+    body: str = Field(description="Issue body")
+
+@composio.experimental.tool()
+def create_and_notify(input: CreateIssueInput, ctx: SessionContext):
+    """Create a GitHub issue and post a Slack notification."""
+    # Call another Composio tool from within your custom tool
+    result = ctx.execute(
+        "GITHUB_CREATE_ISSUE",
+        {"title": input.title, "body": input.body, "owner": "my-org", "repo": "my-repo"},
+    )
+    return {"issue_created": result.successful, "user": ctx.user_id}
+```
+
+```typescript TypeScript
+import { Composio, experimental_createTool, SessionContext } from '@composio/core';
+import { z } from 'zod';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const createAndNotify = experimental_createTool('CREATE_AND_NOTIFY', {
+  name: 'Create and Notify',
+  description: 'Create a GitHub issue and post a Slack notification.',
+  inputParams: z.object({
+    title: z.string().describe('Issue title'),
+    body: z.string().describe('Issue body'),
+  }),
+  execute: async (input, ctx: SessionContext) => {
+    // Call another Composio tool from within your custom tool
+    const result = await ctx.execute('GITHUB_CREATE_ISSUE', {
+      title: input.title,
+      body: input.body,
+      owner: 'my-org',
+      repo: 'my-repo',
+    });
+    return { issueCreated: result.successful, user: ctx.userId };
+  },
+});
+```
+</CodeGroup>
+
+<Tip>
+  `SessionContext.execute()` lets you chain Composio tools inside a custom tool. Use `ctx.userId` to identify the current session's user for multi-tenant logic.
+</Tip>
+
+## Grouping tools into custom toolkits
+
+When you have several related custom tools, group them in a **custom toolkit**. The toolkit slug becomes part of each tool's final name: a tool `GREP` inside toolkit `DEV_TOOLS` becomes `LOCAL_DEV_TOOLS_GREP`.
+
+<CodeGroup>
+```python Python
+from pydantic import BaseModel, Field
+from composio import Composio
+
+composio = Composio()
+
+dev_tools = composio.experimental.Toolkit(
+    slug="DEV_TOOLS",
+    name="Dev Tools",
+    description="Local developer utilities for search and code analysis.",
+)
+
+class GrepInput(BaseModel):
+    pattern: str = Field(description="Regex pattern to search for")
+    path: str = Field(description="File path or directory to search")
+
+@dev_tools.tool()
+def grep(input: GrepInput, ctx):
+    """Search for a regex pattern across local files."""
+    import subprocess
+    result = subprocess.run(
+        ["grep", "-rn", input.pattern, input.path],
+        capture_output=True,
+        text=True,
+    )
+    return {"output": result.stdout, "exit_code": result.returncode}
+
+class WcInput(BaseModel):
+    path: str = Field(description="File path to count lines in")
+
+@dev_tools.tool()
+def line_count(input: WcInput, ctx):
+    """Count the number of lines in a file."""
+    with open(input.path) as f:
+        count = sum(1 for _ in f)
+    return {"lines": count}
+
+# Pass the toolkit to a session
+session = composio.create(
+    user_id="user_123",
+    experimental={
+        "custom_toolkits": [dev_tools],
+    },
+)
+```
+
+```typescript TypeScript
+import { Composio, experimental_createTool, experimental_createToolkit } from '@composio/core';
+import { z } from 'zod';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const grep = experimental_createTool('GREP', {
+  name: 'Grep Search',
+  description: 'Search for a regex pattern across local files.',
+  inputParams: z.object({
+    pattern: z.string().describe('Regex pattern to search for'),
+    path: z.string().describe('File path or directory to search'),
+  }),
+  execute: async (input) => {
+    const { execSync } = await import('child_process');
+    const output = execSync(`grep -rn "${input.pattern}" "${input.path}"`).toString();
+    return { output };
+  },
+});
+
+const lineCount = experimental_createTool('LINE_COUNT', {
+  name: 'Line Count',
+  description: 'Count the number of lines in a file.',
+  inputParams: z.object({
+    path: z.string().describe('File path to count lines in'),
+  }),
+  execute: async (input) => {
+    const { readFileSync } = await import('fs');
+    const lines = readFileSync(input.path, 'utf-8').split('\n').length;
+    return { lines };
+  },
+});
+
+const devToolkit = experimental_createToolkit('DEV_TOOLS', {
+  name: 'Dev Tools',
+  description: 'Local developer utilities for search and code analysis.',
+  tools: [grep, lineCount],
+});
+
+// Pass the toolkit to a session
+const session = await composio.create('user_123', {
+  experimental: {
+    customToolkits: [devToolkit],
+  },
+});
+```
+</CodeGroup>
+
+## Mixing custom and built-in tools
+
+Custom tools and toolkits coexist with Composio's built-in integrations in the same session. Pass both `custom_tools` / `custom_toolkits` alongside the normal `toolkits` list when creating the session.
+
+<CodeGroup>
+```python Python
+session = composio.create(
+    user_id="user_123",
+    toolkits=["github", "slack"],          # built-in Composio tools
+    experimental={
+        "custom_tools": [search_files],    # your local tools
+        "custom_toolkits": [dev_tools],    # your local toolkits
+    },
+)
+```
+
+```typescript TypeScript
+const session = await composio.create('user_123', {
+  toolkits: ['github', 'slack'],           // built-in Composio tools
+  experimental: {
+    customTools: [searchFiles],            // your local tools
+    customToolkits: [devToolkit],          // your local toolkits
+  },
+});
+```
+</CodeGroup>
+
+<Note>
+  Custom tool APIs (`experimental_createTool`, `experimental_createToolkit`, and `composio.experimental.tool()` / `composio.experimental.Toolkit()`) are stable for production use. The `experimental_` prefix in TypeScript signals that the API surface may evolve between minor versions — check the changelog when upgrading.
+</Note>

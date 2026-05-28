@@ -1,0 +1,404 @@
+---
+title: 'Composio CLI Command Reference'
+description: 'Complete reference for all Composio CLI commands. Covers auth, tools, toolkits, triggers, connected accounts, code generation, logs, and MCP management.'
+---
+
+This page is the complete reference for every `composio` CLI command. All commands accept `--help` for inline usage information and `--json` for machine-readable output.
+
+<Note>
+  Add `--json` to any command to receive structured JSON output instead of the interactive table view. This is recommended for CI pipelines and shell scripting.
+</Note>
+
+---
+
+## Authentication
+
+### `composio login`
+
+Open a browser to authenticate and store credentials locally.
+
+```bash
+composio login
+composio login --no-browser          # Print URL, don't open browser
+composio login --user-api-key <key>  # Non-interactive login with API key
+composio login --org <id|name>       # Set active org during login
+```
+
+### `composio logout`
+
+Remove stored credentials from the local machine.
+
+```bash
+composio logout
+```
+
+### `composio signup`
+
+Create a new Composio account from the CLI.
+
+```bash
+composio signup
+```
+
+### `composio whoami`
+
+Display the currently authenticated account (email, organisation, project, account type).
+
+```bash
+composio whoami
+```
+
+---
+
+## Tools
+
+### `composio tools list <toolkit>`
+
+List tools available in a toolkit.
+
+```bash
+composio tools list github
+composio tools list gmail --query "send email"
+composio tools list slack --limit 50
+```
+
+| Argument / Flag | Description |
+|---|---|
+| `<toolkit>` | Toolkit slug (e.g. `github`, `gmail`). **Required.** |
+| `--query <text>` | Text search by name, slug, or description. |
+| `--tags <tag>` | Filter by tag (e.g. `important`). |
+| `--limit <n>` | Results per page (1–1000, default 30). |
+
+### `composio tools search <query>`
+
+Semantic search for tools across all toolkits.
+
+```bash
+composio tools search "send a slack message"
+composio tools search "create github issue" --limit 10
+```
+
+### `composio tools info <slug>`
+
+Show detailed metadata for a single tool: description, input schema, output schema, and required scopes.
+
+```bash
+composio tools info GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER
+```
+
+### `composio tools execute <slug>`
+
+Execute a tool interactively from the CLI. The CLI validates input arguments, resolves the active connected account, and prints the result.
+
+```bash
+composio tools execute GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER
+composio tools execute GMAIL_SEND_EMAIL --json
+```
+
+---
+
+## Toolkits
+
+### `composio toolkits list`
+
+List all available toolkits.
+
+```bash
+composio toolkits list
+composio toolkits list --category productivity
+```
+
+| Flag | Description |
+|---|---|
+| `--category <category>` | Filter by category name. |
+
+### `composio toolkits search`
+
+Search toolkits by name or description.
+
+```bash
+composio toolkits search "email"
+```
+
+### `composio toolkits info <slug>`
+
+Show detailed metadata for a toolkit: description, auth methods, and available tools.
+
+```bash
+composio toolkits info github
+```
+
+### `composio toolkits version <slug>`
+
+List available versions for a toolkit.
+
+```bash
+composio toolkits version github
+```
+
+---
+
+## Connected Accounts
+
+### `composio connected-accounts list`
+
+List all connected accounts in your project.
+
+```bash
+composio connected-accounts list
+composio connected-accounts list --json
+```
+
+### `composio connected-accounts info <id>`
+
+Show details for a specific connected account.
+
+```bash
+composio connected-accounts info ca_abc123
+```
+
+### `composio connected-accounts link <toolkit>`
+
+Initiate an OAuth connection flow for a toolkit. Opens the auth URL in your browser (or prints it with `--no-browser`).
+
+```bash
+composio connected-accounts link github
+composio connected-accounts link gmail --no-browser
+```
+
+### `composio connected-accounts whoami`
+
+Show which connected accounts are active for the current CLI session user.
+
+```bash
+composio connected-accounts whoami
+```
+
+---
+
+## Triggers
+
+### `composio triggers list`
+
+List all trigger types available, optionally filtered by toolkit.
+
+```bash
+composio triggers list
+composio triggers list --toolkit github
+```
+
+### `composio triggers create <slug>`
+
+Create (or upsert) a trigger instance interactively.
+
+```bash
+composio triggers create GITHUB_COMMIT_EVENT
+```
+
+### `composio triggers enable <id>`
+
+Enable a trigger instance by ID.
+
+```bash
+composio triggers enable ti_abc123
+```
+
+### `composio triggers disable <id>`
+
+Disable a trigger instance by ID.
+
+```bash
+composio triggers disable ti_abc123
+```
+
+### `composio triggers listen`
+
+Start a real-time listener in the terminal that prints trigger events as they arrive.
+
+```bash
+composio triggers listen
+composio triggers listen --trigger GITHUB_COMMIT_EVENT
+composio triggers listen --user user_alice
+```
+
+### `composio triggers info <slug>`
+
+Show the schema and configuration options for a trigger type.
+
+```bash
+composio triggers info GITHUB_COMMIT_EVENT
+```
+
+### `composio triggers status`
+
+Show a summary of all active trigger instances in your project.
+
+```bash
+composio triggers status
+```
+
+---
+
+## Auth Configs
+
+### `composio auth-configs list`
+
+List all auth configurations in your project.
+
+```bash
+composio auth-configs list
+```
+
+### `composio auth-configs info <id>`
+
+Show details for a specific auth config.
+
+```bash
+composio auth-configs info ac_abc123
+```
+
+### `composio auth-configs create`
+
+Create a new auth config interactively (e.g. supply your own OAuth app credentials).
+
+```bash
+composio auth-configs create
+```
+
+---
+
+## Code Generation
+
+### `composio generate ts`
+
+Generate TypeScript type stubs for toolkits, tools, and triggers.
+
+```bash
+composio generate ts --toolkit github --output ./src/composio-types.ts
+composio generate ts --toolkit github --toolkit gmail --output ./types/
+```
+
+| Flag | Description |
+|---|---|
+| `--toolkit <slug>` | Toolkit to generate types for. Repeatable. |
+| `--output <path>` | Output file or directory path. |
+| `--compact` | Emit a compact single-file output. |
+| `--transpiled` | Emit plain JavaScript instead of TypeScript. |
+
+### `composio generate py`
+
+Generate Python type stubs for toolkits.
+
+```bash
+composio generate py --toolkit github --output ./composio_types/
+```
+
+| Flag | Description |
+|---|---|
+| `--toolkit <slug>` | Toolkit to generate types for. Repeatable. |
+| `--output <path>` | Output directory path. |
+
+---
+
+## Logs
+
+### `composio logs tools`
+
+Stream or fetch recent tool execution logs.
+
+```bash
+composio logs tools
+composio logs tools --limit 50
+```
+
+### `composio logs triggers`
+
+Stream or fetch recent trigger event logs.
+
+```bash
+composio logs triggers
+composio logs triggers --limit 100
+```
+
+| Flag | Description |
+|---|---|
+| `--limit <n>` | Number of log entries to fetch. |
+
+---
+
+## Organizations
+
+### `composio orgs list`
+
+List all organisations your account belongs to.
+
+```bash
+composio orgs list
+```
+
+### `composio orgs switch`
+
+Switch the active organisation for subsequent CLI commands.
+
+```bash
+composio orgs switch
+```
+
+---
+
+## Local Tools
+
+Local tools are Python functions running on your machine that can be executed by the Composio runtime or the CLI.
+
+### `composio local-tools list`
+
+List all registered local tools.
+
+```bash
+composio local-tools list
+```
+
+### `composio local-tools configure`
+
+Configure the local tool runtime (port, authentication, etc.).
+
+```bash
+composio local-tools configure
+```
+
+### `composio local-tools doctor`
+
+Run a health check on the local tool runtime.
+
+```bash
+composio local-tools doctor
+```
+
+---
+
+## Development Utilities
+
+### `composio dev`
+
+Start the Composio local development server. Enables hot-reloading of local tool definitions and proxied API calls for rapid iteration.
+
+```bash
+composio dev
+```
+
+### `composio proxy`
+
+Proxy an authenticated API request through a connected account directly from the CLI.
+
+```bash
+composio proxy \
+  --connected-account ca_abc123 \
+  --method GET \
+  --endpoint https://api.github.com/user
+```
+
+---
+
+<Tip>
+  Run `composio <command> --help` at any level of the command tree to see full usage, all available flags, and examples. For instance: `composio tools --help`, `composio triggers list --help`.
+</Tip>

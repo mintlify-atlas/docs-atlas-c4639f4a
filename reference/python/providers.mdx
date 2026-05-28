@@ -1,0 +1,355 @@
+---
+title: 'Python Provider Classes Reference'
+description: 'Reference for all Composio Python provider adapters. Providers translate Composio tools into the format expected by each AI framework.'
+---
+
+Providers are the bridge between Composio's universal tool schema and the specific format expected by each AI framework. Pass a provider instance to `Composio(provider=...)` and the SDK automatically returns the right types from `composio.tools.get()` and `session.tools()`.
+
+<Note>
+  For a conceptual overview of how providers fit into the SDK architecture, see the [Providers Overview](/providers/overview) guide.
+</Note>
+
+## Base Classes
+
+All providers inherit from one of two abstract base classes.
+
+### `BaseProvider[TTool, TToolCollection]`
+
+The root generic base class. Defines the `name` class attribute and the `wrap_tools` contract that all providers must implement.
+
+```python
+from composio.core.provider.base import BaseProvider
+```
+
+### `NonAgenticProvider[TTool, TToolCollection]`
+
+For frameworks where the SDK does **not** manage the execution loop — the LLM returns tool calls and your code executes them manually. The provider wraps tool schemas only; execution is done via `composio.tools.execute()`.
+
+```python
+from composio.core.provider.none_agentic import NonAgenticProvider
+
+class MyProvider(NonAgenticProvider[MyTool, list[MyTool]], name="my_provider"):
+    def wrap_tool(self, tool) -> MyTool: ...
+    def wrap_tools(self, tools) -> list[MyTool]: ...
+```
+
+### `AgenticProvider[TTool, TToolCollection]`
+
+For frameworks that manage their own execution loop (LangChain, CrewAI, AutoGen, etc.). The provider receives both tool schemas and an `execute_tool` callable, so the framework can call tools autonomously.
+
+```python
+from composio.core.provider.agentic import AgenticProvider, AgenticProviderExecuteFn
+
+class MyAgenticProvider(AgenticProvider[MyTool, list[MyTool]], name="my_provider"):
+    def wrap_tool(self, tool, execute_tool: AgenticProviderExecuteFn) -> MyTool: ...
+    def wrap_tools(self, tools, execute_tool: AgenticProviderExecuteFn) -> list[MyTool]: ...
+```
+
+---
+
+## Provider Reference
+
+### `OpenAIProvider`
+
+Wraps tools as `list[ChatCompletionToolParam]` for use with `openai.chat.completions.create()`. This is the **default provider** when none is specified.
+
+```bash
+pip install composio-openai
+```
+
+```python
+from composio import Composio
+from composio_openai import OpenAIProvider
+from openai import OpenAI
+
+composio = Composio(provider=OpenAIProvider())
+client = OpenAI()
+
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Star the composio repo"}],
+    tools=tools,
+)
+
+# Handle tool calls manually
+results = composio.provider.handle_tool_calls(
+    user_id="user_alice",
+    response=response,
+)
+```
+
+**Helper methods on `OpenAIProvider`:**
+
+| Method | Description |
+|---|---|
+| `handle_tool_calls(user_id, response)` | Execute all tool calls in a `ChatCompletion` response and return a list of `ToolExecutionResponse`. |
+| `handle_assistant_tool_calls(user_id, run, thread, client)` | Execute tool calls from an OpenAI Assistants API `Run` object. |
+| `wait_and_handle_assistant_tool_calls(user_id, run, thread, client)` | Poll a `Run` until completion, executing any required tool actions. |
+
+---
+
+### `OpenAIResponsesProvider`
+
+Provider for the OpenAI **Responses API** (`openai.responses.create`). Included in the `composio-openai` package.
+
+```python
+from composio_openai import OpenAIResponsesProvider
+
+composio = Composio(provider=OpenAIResponsesProvider())
+```
+
+---
+
+### `OpenAIAgentsProvider`
+
+**Agentic** provider for [OpenAI Agents SDK](https://github.com/openai/openai-agents-python). Tools are wrapped as agentic function definitions that the agents runtime calls automatically.
+
+```bash
+pip install composio-openai-agents
+```
+
+```python
+from composio import Composio
+from composio_openai_agents import OpenAIAgentsProvider
+
+composio = Composio(provider=OpenAIAgentsProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+# Pass tools to agents.Agent(tools=tools, ...)
+```
+
+---
+
+### `AnthropicProvider`
+
+Wraps tools as `list[ToolParam]` for use with `anthropic.messages.create()`.
+
+```bash
+pip install composio-anthropic
+```
+
+```python
+from composio import Composio
+from composio_anthropic import AnthropicProvider
+import anthropic
+
+composio = Composio(provider=AnthropicProvider())
+client = anthropic.Anthropic()
+
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+
+response = client.messages.create(
+    model="claude-opus-4-5",
+    max_tokens=1024,
+    tools=tools,
+    messages=[{"role": "user", "content": "Star the composio repo"}],
+)
+```
+
+---
+
+### `LangchainProvider`
+
+**Agentic** provider for [LangChain](https://python.langchain.com/). Wraps tools as `list[DynamicStructuredTool]` that LangChain agents can call autonomously.
+
+```bash
+pip install composio-langchain
+```
+
+```python
+from composio import Composio
+from composio_langchain import LangchainProvider
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate
+
+composio = Composio(provider=LangchainProvider())
+llm = ChatOpenAI(model="gpt-4o")
+
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant."),
+    ("human", "{input}"),
+    ("placeholder", "{agent_scratchpad}"),
+])
+agent = create_tool_calling_agent(llm, tools, prompt)
+executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+executor.invoke({"input": "Star the composio repo"})
+```
+
+---
+
+### `LangGraphProvider`
+
+**Agentic** provider for [LangGraph](https://langchain-ai.github.io/langgraph/). Returns tools compatible with LangGraph's node-based graph execution.
+
+```bash
+pip install composio-langgraph
+```
+
+```python
+from composio import Composio
+from composio_langgraph import LangGraphProvider
+
+composio = Composio(provider=LangGraphProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+# Pass tools to your LangGraph ToolNode or bind_tools call
+```
+
+---
+
+### `CrewAIProvider`
+
+**Agentic** provider for [CrewAI](https://crewai.com/). Tools are wrapped as CrewAI-compatible structured tool objects.
+
+```bash
+pip install composio-crewai
+```
+
+```python
+from composio import Composio
+from composio_crewai import CrewAIProvider
+from crewai import Agent, Task, Crew
+
+composio = Composio(provider=CrewAIProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+
+agent = Agent(
+    role="GitHub Assistant",
+    goal="Help with GitHub tasks",
+    backstory="You are a GitHub expert.",
+    tools=tools,
+)
+task = Task(description="Star the composio repo", agent=agent)
+crew = Crew(agents=[agent], tasks=[task])
+crew.kickoff()
+```
+
+---
+
+### `AutoGenProvider`
+
+**Agentic** provider for [Microsoft AutoGen](https://microsoft.github.io/autogen/).
+
+```bash
+pip install composio-autogen
+```
+
+```python
+from composio import Composio
+from composio_autogen import AutoGenProvider
+
+composio = Composio(provider=AutoGenProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+# Register tools with your AutoGen agents
+```
+
+---
+
+### `LlamaIndexProvider`
+
+**Agentic** provider for [LlamaIndex](https://llamaindex.ai/).
+
+```bash
+pip install composio-llamaindex
+```
+
+```python
+from composio import Composio
+from composio_llamaindex import LlamaIndexProvider
+
+composio = Composio(provider=LlamaIndexProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+# Pass to llama_index.core.agent.ReActAgent.from_tools(tools=tools, ...)
+```
+
+---
+
+### `GoogleProvider`
+
+Provider for [Google GenAI](https://ai.google.dev/) (`google-generativeai`). Wraps tools for use with the Google Generative AI SDK.
+
+```bash
+pip install composio-google
+```
+
+```python
+from composio import Composio
+from composio_google import GoogleProvider
+
+composio = Composio(provider=GoogleProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+```
+
+---
+
+### `GoogleADKProvider`
+
+Provider for [Google Agent Development Kit (ADK)](https://google.github.io/adk-docs/).
+
+```bash
+pip install composio-google-adk
+```
+
+```python
+from composio import Composio
+from composio_google_adk import GoogleADKProvider
+
+composio = Composio(provider=GoogleADKProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+```
+
+---
+
+### `GeminiProvider`
+
+Provider for [Google Gemini](https://ai.google.dev/gemini-api). Wraps tools in the format expected by the Gemini API's function calling interface.
+
+```bash
+pip install composio-gemini
+```
+
+```python
+from composio import Composio
+from composio_gemini import GeminiProvider
+
+composio = Composio(provider=GeminiProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+```
+
+---
+
+## Building a Custom Provider
+
+Extend `NonAgenticProvider` (if your framework handles execution separately) or `AgenticProvider` (if the framework drives its own tool-calling loop). The only required method is `wrap_tools`.
+
+```python
+from composio import Composio
+from composio.core.provider.none_agentic import NonAgenticProvider
+from composio.client.types import Tool
+
+class MyTool(dict):
+    """Your framework's tool representation."""
+
+class MyProvider(NonAgenticProvider[MyTool, list[MyTool]], name="my_framework"):
+    def wrap_tool(self, tool: Tool) -> MyTool:
+        return MyTool(
+            name=tool.slug,
+            description=tool.description,
+            parameters=tool.input_parameters,
+        )
+
+    def wrap_tools(self, tools) -> list[MyTool]:
+        return [self.wrap_tool(t) for t in tools]
+
+# Use your custom provider
+composio = Composio(provider=MyProvider())
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+# tools is now list[MyTool]
+```
+
+<Tip>
+  The `name` keyword argument in the class definition (`name="my_framework"`) is required — it sets the `provider.name` class attribute used for telemetry and API routing.
+</Tip>

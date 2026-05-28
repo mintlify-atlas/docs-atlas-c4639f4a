@@ -1,0 +1,281 @@
+---
+title: 'Tools Class - Python SDK Reference'
+description: 'Reference for the Composio Python Tools class. Methods to fetch, search, execute, and proxy tool calls. Access via composio.tools.'
+---
+
+The `Tools` class manages fetching, searching, executing, and proxying Composio tools. It is generic over `TTool` and `TToolCollection`, which are inferred from the provider passed to `Composio`. Access it via `composio.tools`.
+
+```python
+from composio import Composio
+
+composio = Composio()
+tools_client = composio.tools  # Tools[OpenAITool, list[OpenAITool]]
+```
+
+## Methods
+
+### `get()`
+
+Fetch provider-wrapped tools for a user. The return type is `TToolCollection` — for example `list[ChatCompletionToolParam]` with OpenAI or `list[ToolParam]` with Anthropic.
+
+```python
+tools = composio.tools.get(
+    user_id="user_alice",
+    toolkits=["github", "gmail"],
+    limit=20,
+)
+```
+
+#### Parameters
+
+<ParamField path="user_id" type="str" required>
+  The user ID whose connected accounts are used for auth context when tools are executed.
+</ParamField>
+
+<ParamField path="slug" type="str">
+  Fetch a single tool by its exact slug (e.g. `"GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER"`). Mutually exclusive with `tools`.
+</ParamField>
+
+<ParamField path="tools" type="List[str]">
+  Fetch a specific list of tools by slug. Custom tool slugs registered with `composio.tools.custom_tool` are also resolved here.
+</ParamField>
+
+<ParamField path="search" type="str">
+  Free-text semantic search across tool names and descriptions.
+</ParamField>
+
+<ParamField path="toolkits" type="List[str]">
+  Filter by toolkit slugs (e.g. `["github", "slack"]`).
+</ParamField>
+
+<ParamField path="scopes" type="List[str]">
+  Filter tools by required OAuth scopes.
+</ParamField>
+
+<ParamField path="modifiers" type="Modifiers">
+  Optional list of modifier functions (`@schema_modifier`, `@before_execute`, `@after_execute`, `@before_file_upload`) applied to tool schemas and execution calls.
+</ParamField>
+
+<ParamField path="limit" type="int">
+  Maximum number of tools to return when searching or listing by toolkit. Has no effect when fetching by slug or explicit tool list.
+</ParamField>
+
+---
+
+### `execute()`
+
+Execute a tool by slug and return a structured response.
+
+```python
+result = composio.tools.execute(
+    "GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER",
+    arguments={"owner": "composiohq", "repo": "composio"},
+    user_id="user_alice",
+)
+print(result["data"])        # response payload
+print(result["successful"])  # True / False
+print(result["error"])       # error message or None
+```
+
+#### Parameters
+
+<ParamField path="slug" type="str" required>
+  The slug of the tool to execute.
+</ParamField>
+
+<ParamField path="arguments" type="Dict[str, Any]" required>
+  Input arguments matching the tool's JSON Schema. Pydantic model instances inside arguments are serialised automatically.
+</ParamField>
+
+<ParamField path="connected_account_id" type="str">
+  Pin execution to a specific connected account ID.
+</ParamField>
+
+<ParamField path="custom_auth_params" type="CustomAuthParams">
+  Provide custom authentication credentials (e.g. a bearer token) instead of a stored connected account.
+</ParamField>
+
+<ParamField path="user_id" type="str">
+  The user ID whose connected account is selected automatically by toolkit.
+</ParamField>
+
+<ParamField path="version" type="str">
+  Override the toolkit version for this single execution (overrides the SDK-level `toolkit_versions`).
+</ParamField>
+
+<ParamField path="modifiers" type="Modifiers">
+  Modifiers applied around this execution call.
+</ParamField>
+
+#### Response — `ToolExecutionResponse`
+
+<ResponseField name="data" type="dict">
+  The structured output returned by the tool.
+</ResponseField>
+
+<ResponseField name="error" type="str | None">
+  Human-readable error message, or `None` when `successful` is `True`.
+</ResponseField>
+
+<ResponseField name="successful" type="bool">
+  `True` when the tool executed without error.
+</ResponseField>
+
+---
+
+### `proxy()`
+
+Make an authenticated HTTP request through a connected account without invoking a named tool. Useful for API endpoints not yet covered by a Composio tool.
+
+```python
+response = composio.tools.proxy(
+    endpoint="https://api.github.com/user",
+    method="GET",
+    connected_account_id="ca_abc123",
+)
+```
+
+#### Parameters
+
+<ParamField path="endpoint" type="str" required>
+  Full URL of the target API endpoint.
+</ParamField>
+
+<ParamField path="method" type="str" required>
+  HTTP method: `"GET"`, `"POST"`, `"PUT"`, `"DELETE"`, `"PATCH"`, or `"HEAD"`.
+</ParamField>
+
+<ParamField path="body" type="object">
+  Request body for `POST`, `PUT`, or `PATCH` requests.
+</ParamField>
+
+<ParamField path="connected_account_id" type="str">
+  The connected account whose credentials are injected into the outgoing request.
+</ParamField>
+
+<ParamField path="parameters" type="List[Parameter]">
+  Additional query or header parameters to attach to the proxied request.
+</ParamField>
+
+<ParamField path="custom_connection_data" type="CustomConnectionData">
+  Supply custom connection data directly (takes priority over `connected_account_id`).
+</ParamField>
+
+---
+
+### `get_raw_composio_tools()`
+
+Fetch raw `Tool` schema objects from the Composio API without provider wrapping. Useful when building custom integrations or inspecting schemas directly.
+
+```python
+raw_tools = composio.tools.get_raw_composio_tools(
+    toolkits=["github"],
+    limit=10,
+)
+for tool in raw_tools:
+    print(tool.slug, tool.description)
+```
+
+#### Parameters
+
+<ParamField path="tools" type="List[str]">
+  Fetch specific tools by slug.
+</ParamField>
+
+<ParamField path="search" type="str">
+  Semantic search query.
+</ParamField>
+
+<ParamField path="toolkits" type="List[str]">
+  Filter by toolkit slugs.
+</ParamField>
+
+<ParamField path="scopes" type="List[str]">
+  Filter by required OAuth scopes.
+</ParamField>
+
+<ParamField path="limit" type="int">
+  Maximum number of results.
+</ParamField>
+
+<Note>
+  At least one of `tools`, `search`, or `toolkits` must be provided. Raises `InvalidParams` otherwise.
+</Note>
+
+---
+
+### `get_raw_composio_tool_by_slug()`
+
+Fetch the schema for a single tool by slug.
+
+```python
+tool = composio.tools.get_raw_composio_tool_by_slug(
+    "GITHUB_STAR_A_REPOSITORY_FOR_AUTHENTICATED_USER"
+)
+print(tool.input_parameters)
+```
+
+#### Parameters
+
+<ParamField path="slug" type="str" required>
+  Exact tool slug to retrieve.
+</ParamField>
+
+---
+
+### `custom_tool` (decorator)
+
+Register an in-process Python function as a custom Composio tool. The decorated function is available alongside standard Composio tools in `get()` and `execute()` calls.
+
+```python
+from composio import Composio
+
+composio = Composio()
+
+@composio.tools.custom_tool
+def send_slack_dm(user: str, message: str) -> dict:
+    """Send a direct message to a Slack user."""
+    # your implementation here
+    return {"ok": True}
+
+# Use it alongside Composio tools
+tools = composio.tools.get(
+    user_id="user_alice",
+    tools=["SEND_SLACK_DM", "GMAIL_SEND_EMAIL"],
+)
+```
+
+## Full Example
+
+```python
+import os
+from composio import Composio
+from composio_openai import OpenAIProvider
+from openai import OpenAI
+
+composio = Composio(
+    provider=OpenAIProvider(),
+    toolkit_versions={"github": "20250906_01"},
+)
+client = OpenAI()
+
+# Get tools
+tools = composio.tools.get(user_id="user_alice", toolkits=["github"])
+
+# Run chat completion
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Star the composio/composio repo"}],
+    tools=tools,
+)
+
+# Handle tool calls
+for tool_call in response.choices[0].message.tool_calls or []:
+    import json
+    result = composio.tools.execute(
+        tool_call.function.name,
+        arguments=json.loads(tool_call.function.arguments),
+        user_id="user_alice",
+    )
+    print(result)
+```

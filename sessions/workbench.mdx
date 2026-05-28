@@ -1,0 +1,221 @@
+---
+title: 'Composio Workbench: Persistent Code Sandbox'
+description: 'The Composio Workbench provides a persistent Python execution environment scoped to a session. Use it to run code, manage files, and execute multi-step agent tasks.'
+---
+
+The **Workbench** is an optional, per-session compute environment that gives your AI agent a place to run code, write files, and maintain state across multiple tool calls. It is provisioned on demand when a session is created with `workbench.enable: true` (the default when workbench config is omitted is server-side enabled).
+
+The Workbench is scoped entirely to the session — two sessions never share a sandbox. Files written to `/mnt/files/` inside the sandbox persist for the lifetime of the session even if the sandbox process is restarted.
+
+## Enabling the Workbench
+
+Pass the `workbench` option when creating a session:
+
+<CodeGroup>
+```typescript TypeScript
+const session = await composio.create('user_123', {
+  workbench: {
+    enable: true,
+    sandboxSize: 'standard', // 1 vCPU / 1 GB RAM
+  },
+});
+```
+
+```python Python
+session = composio.tool_router.create(
+    user_id="user_123",
+    workbench={
+        "enable": True,
+        "sandbox_size": "standard",  # 1 vCPU / 1 GB RAM
+    },
+)
+```
+</CodeGroup>
+
+## Sandbox Sizes
+
+Choose a sandbox tier based on the computational demands of your agent's tasks.
+
+| `sandbox_size` | vCPU | RAM | Use Case |
+|---|---|---|---|
+| `standard` (default) | 1 | 1 GB | Light scripting, data parsing, API calls |
+| `medium` | 2 | 2 GB | Data processing, moderate ML inference |
+| `large` | 4 | 4 GB | Heavy computation, large datasets |
+| `xlarge` | 8 | 8 GB | Parallel workloads, large model inference |
+
+<CodeGroup>
+```typescript TypeScript
+// Large sandbox for compute-heavy tasks
+const session = await composio.create('user_123', {
+  workbench: {
+    enable: true,
+    sandboxSize: 'large',
+  },
+});
+```
+
+```python Python
+session = composio.tool_router.create(
+    user_id="user_123",
+    workbench={
+        "enable": True,
+        "sandbox_size": "large",
+    },
+)
+```
+</CodeGroup>
+
+## How Agents Use the Workbench
+
+When the Workbench is enabled, Composio automatically injects two meta tools into `session.tools()`:
+
+| Meta Tool | Description |
+|---|---|
+| `COMPOSIO_REMOTE_WORKBENCH` | Execute multi-line Python code in the persistent sandbox. State (variables, imports, installed packages) carries over between calls. |
+| `COMPOSIO_REMOTE_BASH_TOOL` | Run shell commands in the sandbox environment. Useful for file manipulation, running scripts, or calling CLI tools. |
+
+Your agent calls these tools like any other — Composio routes execution to the sandbox automatically.
+
+```typescript
+// The agent autonomously decides to write and run Python code
+const tools = await session.tools();
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{
+    role: 'user',
+    content: 'Fetch the GitHub issues for my-org/my-repo and plot a bar chart of issue counts by label.',
+  }],
+  tools,
+});
+```
+
+## Disabling the Workbench
+
+If your use case does not need code execution, disable the Workbench to reduce resource usage and remove `COMPOSIO_REMOTE_WORKBENCH` and `COMPOSIO_REMOTE_BASH_TOOL` from the agent's tool list:
+
+<CodeGroup>
+```typescript TypeScript
+const session = await composio.create('user_123', {
+  workbench: { enable: false },
+});
+```
+
+```python Python
+session = composio.tool_router.create(
+    user_id="user_123",
+    workbench={"enable": False},
+)
+```
+</CodeGroup>
+
+## File Management via `session.experimental.files`
+
+The Workbench exposes a `/mnt/files/` directory inside the sandbox. Your server-side code can interact with that mount through `session.experimental.files`, which supports listing, uploading, and downloading files.
+
+### List Files
+
+<CodeGroup>
+```typescript TypeScript
+const files = await session.experimental.files.list({ path: '/' });
+console.log(files.items);
+```
+
+```python Python
+files = session.experimental.files.list(path="/")
+print(files.items)
+```
+</CodeGroup>
+
+### Upload a File
+
+You can upload from a local file path, a URL, or raw bytes:
+
+<CodeGroup>
+```typescript TypeScript
+// Upload from a local path
+const remoteFile = await session.experimental.files.upload('./data.csv', {
+  remotePath: 'datasets/data.csv',
+});
+
+// Upload from a URL
+const remoteFile = await session.experimental.files.upload(
+  'https://example.com/report.pdf',
+  { remotePath: 'reports/report.pdf' }
+);
+```
+
+```python Python
+from pathlib import Path
+
+# Upload from a local path
+remote_file = session.experimental.files.upload(
+    Path("./data.csv"),
+    remote_path="datasets/data.csv",
+)
+
+# Upload from a URL
+remote_file = session.experimental.files.upload(
+    "https://example.com/report.pdf",
+    remote_path="reports/report.pdf",
+)
+
+# Upload raw bytes
+remote_file = session.experimental.files.upload(
+    b"col1,col2\n1,2\n3,4",
+    remote_path="data.csv",
+    mimetype="text/csv",
+)
+```
+</CodeGroup>
+
+### Download a File
+
+Download a file from the session's file mount to your local machine:
+
+<CodeGroup>
+```typescript TypeScript
+const remoteFile = await session.experimental.files.download('output/results.json');
+
+// Read as text
+const text = await remoteFile.text();
+
+// Save to disk
+await remoteFile.save('./local-results.json');
+```
+
+```python Python
+remote_file = session.experimental.files.download("output/results.json")
+
+# Read as text
+text = remote_file.text()
+
+# Read as bytes
+content = remote_file.buffer()
+
+# Save to disk
+saved_path = remote_file.save("./local-results.json")
+print(f"Saved to: {saved_path}")
+```
+</CodeGroup>
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Data Analysis" icon="chart-bar">
+    Let agents fetch data via API tools, then process and visualize it in the sandbox using pandas, matplotlib, or similar libraries.
+  </Card>
+  <Card title="File Generation" icon="file-export">
+    Generate reports, CSVs, or PDFs inside the sandbox, then download the result using `session.experimental.files`.
+  </Card>
+  <Card title="Multi-Step Pipelines" icon="arrow-progress">
+    The Workbench retains state between tool calls. An agent can write partial results, run follow-up code, and accumulate output across many steps.
+  </Card>
+  <Card title="Shell Scripting" icon="terminal">
+    Use `COMPOSIO_REMOTE_BASH_TOOL` to run shell scripts, install packages with `pip`, clone repos, or invoke CLI tools inside the sandbox.
+  </Card>
+</CardGroup>
+
+<Warning>
+The Workbench sandbox is scoped to its session. Changing `sandboxSize` on an existing session recreates the sandbox process — in-memory state (Python variables, running processes) is lost. However, the `/mnt/files/` mount **persists** across sandbox restarts.
+</Warning>

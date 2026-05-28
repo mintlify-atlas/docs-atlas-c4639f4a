@@ -1,0 +1,307 @@
+---
+title: 'Auth Configs: Customize OAuth Applications'
+description: 'Auth configs define how Composio authenticates users with external services. Use managed Composio apps or bring your own OAuth credentials for white-label flows.'
+---
+
+An auth config is the blueprint Composio uses to authenticate users with an external service. It records which OAuth application (client ID / secret) to use, which auth scheme applies, and which OAuth scopes to request. Every connected account is derived from exactly one auth config.
+
+## Two modes
+
+### Composio-managed (zero config)
+
+Composio ships a pre-built OAuth application for every supported toolkit. When you call `toolkits.authorize()` without specifying an auth config, Composio automatically resolves or creates a managed config for you. Users see "Composio" in the OAuth consent screen.
+
+This is the right default for prototypes, internal tools, and any situation where white-labeling is not required.
+
+### Custom auth config (bring your own credentials)
+
+Create a custom auth config when you want to:
+
+- Show **your app's name and logo** on the OAuth consent screen (white-labeling)
+- Request **custom OAuth scopes** beyond Composio's defaults
+- Use **your own client ID/secret** for compliance or security reasons
+- Control the **redirect URI** registered with the provider
+
+<Tip>
+  Custom auth configs are required for white-labeling. Once you create one with your OAuth credentials, every connect link generated from it will show your brand to users.
+</Tip>
+
+## Lifecycle
+
+Auth configs are created in two ways:
+
+1. **Automatically** — `toolkits.authorize()` creates a Composio-managed config the first time a user connects to a new toolkit, and reuses it for all subsequent connections.
+2. **Manually** — you call `authConfigs.create()` to register your own OAuth application credentials.
+
+## API methods
+
+### `authConfigs.create(toolkit, options)`
+
+Create a new auth config for a toolkit. The `type` field switches between managed and custom modes.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio, AuthConfigTypes } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+// Composio-managed (default)
+const managedConfig = await composio.authConfigs.create('github', {
+  type: AuthConfigTypes.COMPOSIO_MANAGED,
+  name: 'GitHub (managed)',
+});
+
+// Custom OAuth app
+const customConfig = await composio.authConfigs.create('github', {
+  type: 'use_custom_auth',
+  name: 'My GitHub OAuth App',
+  authScheme: 'OAUTH2',
+  credentials: {
+    client_id: process.env.GITHUB_CLIENT_ID,
+    client_secret: process.env.GITHUB_CLIENT_SECRET,
+    scopes: 'repo,user:email',
+  },
+});
+
+console.log('Auth config ID:', customConfig.id);
+```
+
+```python Python
+import composio
+
+client = composio.Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+# Composio-managed (default)
+managed_config = client.auth_configs.create(
+    toolkit="github",
+    options={"type": "use_composio_managed_auth"},
+)
+
+# Custom OAuth app
+custom_config = client.auth_configs.create(
+    toolkit="github",
+    options={
+        "type": "use_custom_auth",
+        "name": "My GitHub OAuth App",
+        "auth_scheme": "OAUTH2",
+        "credentials": {
+            "client_id": os.environ["GITHUB_CLIENT_ID"],
+            "client_secret": os.environ["GITHUB_CLIENT_SECRET"],
+            "scopes": "repo,user:email",
+        },
+    },
+)
+
+print("Auth config ID:", custom_config.id)
+```
+</CodeGroup>
+
+### `authConfigs.get(nanoid)`
+
+Fetch a specific auth config by its ID.
+
+<CodeGroup>
+```typescript TypeScript
+const config = await composio.authConfigs.get('ac_abc123');
+console.log(config.name);
+console.log(config.toolkit.slug);
+```
+
+```python Python
+config = client.auth_configs.get("ac_abc123")
+print(config.name)
+print(config.toolkit_slug)
+```
+</CodeGroup>
+
+### `authConfigs.list(query?)`
+
+List all auth configs, with optional filtering.
+
+<CodeGroup>
+```typescript TypeScript
+// All auth configs
+const all = await composio.authConfigs.list();
+
+// Filter to a specific toolkit
+const githubConfigs = await composio.authConfigs.list({ toolkit: 'github' });
+
+// Only Composio-managed configs
+const managedConfigs = await composio.authConfigs.list({ isComposioManaged: true });
+```
+
+```python Python
+# All auth configs
+all_configs = client.auth_configs.list()
+
+# Filter to a specific toolkit
+github_configs = client.auth_configs.list(toolkit_slug="github")
+```
+</CodeGroup>
+
+### `authConfigs.update(nanoid, *, options)`
+
+Update an existing auth config. You can rotate credentials, adjust scopes, or toggle tool availability.
+
+<CodeGroup>
+```typescript TypeScript
+// Update credentials on a custom auth config
+await composio.authConfigs.update('ac_abc123', {
+  type: 'custom',
+  credentials: {
+    client_id: process.env.GITHUB_CLIENT_ID,
+    client_secret: process.env.NEW_GITHUB_CLIENT_SECRET,
+  },
+});
+
+// Update scopes on a managed (default) auth config
+await composio.authConfigs.update('ac_abc123', {
+  type: 'default',
+  scopes: ['repo', 'read:org', 'user:email'],
+});
+```
+
+```python Python
+# Update credentials on a custom auth config
+client.auth_configs.update(
+    "ac_abc123",
+    options={
+        "type": "use_custom_auth",
+        "credentials": {
+            "client_id": os.environ["GITHUB_CLIENT_ID"],
+            "client_secret": os.environ["NEW_GITHUB_CLIENT_SECRET"],
+        },
+    },
+)
+```
+</CodeGroup>
+
+### `authConfigs.enable(nanoid)` / `authConfigs.disable(nanoid)`
+
+Toggle whether an auth config is active. A disabled auth config cannot be used to create new connected accounts.
+
+<CodeGroup>
+```typescript TypeScript
+// Disable (e.g. while rotating credentials)
+await composio.authConfigs.disable('ac_abc123');
+
+// Re-enable after updating
+await composio.authConfigs.enable('ac_abc123');
+```
+
+```python Python
+# Disable
+client.auth_configs.disable("ac_abc123")
+
+# Re-enable
+client.auth_configs.enable("ac_abc123")
+```
+</CodeGroup>
+
+### `authConfigs.delete(nanoid)`
+
+Permanently delete an auth config. All connected accounts derived from it will stop working.
+
+<CodeGroup>
+```typescript TypeScript
+await composio.authConfigs.delete('ac_abc123');
+```
+
+```python Python
+client.auth_configs.delete("ac_abc123")
+```
+</CodeGroup>
+
+## Auth scheme helpers
+
+The `AuthScheme` class (TypeScript) and `auth_scheme` object (Python) create type-safe credential payloads for non-OAuth connected account creation.
+
+<CodeGroup>
+```typescript TypeScript
+import { AuthScheme } from '@composio/core';
+
+// OAuth 2.0 — with token (ACTIVE) or without (INITIALIZING redirect flow)
+AuthScheme.OAuth2({ access_token: 'ghu_…', token_type: 'Bearer' });
+AuthScheme.OAuth2({ redirectUrl: 'https://app.com/callback' });
+
+// OAuth 1.0a
+AuthScheme.OAuth1({ oauth_token: '…', oauth_token_secret: '…' });
+
+// Static credential types
+AuthScheme.APIKey({ api_key: 'sk-…' });
+AuthScheme.Basic({ username: 'alice', password: 's3cr3t' });
+AuthScheme.BearerToken({ token: 'eyJ…' });
+AuthScheme.GoogleServiceAccount({ credentials_json: '{"type":"service_account",…}' });
+AuthScheme.NoAuth();
+```
+
+```python Python
+from composio.core.models.connected_accounts import auth_scheme
+
+# OAuth 2.0
+auth_scheme.oauth2({"access_token": "ghu_…", "token_type": "Bearer"})
+auth_scheme.oauth2({"callback_url": "https://app.com/callback"})
+
+# OAuth 1.0a
+auth_scheme.oauth1({"oauth_token": "…", "oauth_token_secret": "…"})
+
+# Static credential types
+auth_scheme.api_key({"api_key": "sk-…"})
+auth_scheme.basic({"username": "alice", "password": "s3cr3t"})
+auth_scheme.bearer_token({"token": "eyJ…"})
+auth_scheme.google_service_account({"credentials_json": '{"type":"service_account",…}'})
+auth_scheme.no_auth({})
+```
+</CodeGroup>
+
+## Full example: custom GitHub OAuth app
+
+<Steps>
+  <Step title="Create the auth config with your credentials">
+    ```typescript TypeScript
+    const authConfig = await composio.authConfigs.create('github', {
+      type: 'use_custom_auth',
+      name: 'Acme GitHub OAuth',
+      authScheme: 'OAUTH2',
+      credentials: {
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        scopes: 'repo,read:org,user:email',
+      },
+    });
+
+    // Persist this ID — reuse it for every user connection
+    console.log('Auth config:', authConfig.id);
+    ```
+  </Step>
+  <Step title="Use the auth config ID when connecting users">
+    ```typescript TypeScript
+    const connectionRequest = await composio.connectedAccounts.link(
+      'user_123',
+      authConfig.id,
+      { callbackUrl: 'https://acme.com/github/callback' }
+    );
+
+    // Users will see "Acme" on the GitHub consent screen
+    console.log('OAuth URL:', connectionRequest.redirectUrl);
+    ```
+  </Step>
+  <Step title="Wait for the connection to complete">
+    ```typescript TypeScript
+    const connectedAccount = await connectionRequest.waitForConnection(120000);
+    console.log('Connected:', connectedAccount.id);
+    ```
+  </Step>
+</Steps>
+
+## API reference summary
+
+| Method | Description |
+|---|---|
+| `authConfigs.create(toolkit, options)` | Create a new Composio-managed or custom auth config |
+| `authConfigs.get(nanoid)` | Retrieve an auth config by `ac_…` ID |
+| `authConfigs.list(query?)` | List auth configs with optional filters |
+| `authConfigs.update(nanoid, *, options)` | Update credentials, scopes, or tool restrictions |
+| `authConfigs.enable(nanoid)` | Enable a disabled auth config |
+| `authConfigs.disable(nanoid)` | Disable an auth config without deleting it |
+| `authConfigs.delete(nanoid)` | Permanently delete an auth config |

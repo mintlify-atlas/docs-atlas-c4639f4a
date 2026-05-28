@@ -1,0 +1,195 @@
+---
+title: 'Direct Tool Execution Without Sessions'
+description: 'Execute Composio tools directly with composio.tools.get() and composio.tools.execute() without creating a session. Use this for simple, single-user scenarios.'
+---
+
+Composio supports two patterns for working with tools: **sessions** (the recommended approach for most applications) and **direct execution** (a lighter-weight option for simple scripts). Direct execution skips session creation entirely — you fetch tools and execute them in a single, stateless call without any session lifecycle to manage.
+
+## When to use direct execution
+
+<CardGroup cols={2}>
+  <Card title="Use direct execution when…" icon="bolt">
+    - Writing quick scripts or one-off automations
+    - Working with a single, known user
+    - You know the exact tools you need upfront
+    - You don't need dynamic tool discovery at runtime
+    - MCP server integration is not required
+  </Card>
+  <Card title="Use sessions when…" icon="layer-group">
+    - Building multi-user or multi-tenant applications
+    - Tools need to be discovered dynamically by an agent
+    - You want MCP server capabilities
+    - You need fine-grained authorization flows per user
+    - You want Composio to manage tool routing automatically
+  </Card>
+</CardGroup>
+
+## Fetching tools directly
+
+Use `composio.tools.get()` to retrieve provider-wrapped tools for an agent framework (OpenAI, Anthropic, etc.). Pass the `userId`, optionally filter by `toolkits`, and set a `limit` to control how many tools are returned.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+import { OpenAIProvider } from '@composio/openai';
+
+const composio = new Composio({
+  apiKey: process.env.COMPOSIO_API_KEY,
+  provider: new OpenAIProvider(),
+});
+
+// Fetch all GitHub tools for a user
+const tools = await composio.tools.get('user_123', {
+  toolkits: ['github'],
+  limit: 10,
+});
+
+// Fetch a single tool by slug
+const singleTool = await composio.tools.get('user_123', 'GITHUB_CREATE_ISSUE');
+```
+
+```python Python
+from composio import Composio
+from composio.provider import OpenAIProvider
+
+composio = Composio(provider=OpenAIProvider())
+
+# Fetch all GitHub tools for a user
+tools = composio.tools.get(
+    user_id="user_123",
+    toolkits=["github"],
+    limit=10,
+)
+
+# Fetch a single tool by slug
+single_tool = composio.tools.get(
+    user_id="user_123",
+    slug="GITHUB_CREATE_ISSUE",
+)
+```
+</CodeGroup>
+
+## Executing a tool directly
+
+Call `composio.tools.execute()` with the tool slug, the input arguments, and the `userId` to run it without a session. Composio resolves the user's connected account automatically.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+import { OpenAIProvider } from '@composio/openai';
+
+const composio = new Composio({
+  apiKey: process.env.COMPOSIO_API_KEY,
+  provider: new OpenAIProvider(),
+});
+
+const response = await composio.tools.execute(
+  'GITHUB_CREATE_ISSUE',
+  {
+    userId: 'user_123',
+    arguments: {
+      title: 'Bug: login page crashes on Safari',
+      body: 'Steps to reproduce...',
+      owner: 'my-org',
+      repo: 'my-repo',
+    },
+  },
+);
+
+console.log(response.successful); // true
+console.log(response.data);       // { id: 42, url: 'https://github.com/...' }
+```
+
+```python Python
+from composio import Composio
+
+composio = Composio()
+
+response = composio.tools.execute(
+    slug="GITHUB_CREATE_ISSUE",
+    arguments={
+        "title": "Bug: login page crashes on Safari",
+        "body": "Steps to reproduce...",
+        "owner": "my-org",
+        "repo": "my-repo",
+    },
+    user_id="user_123",
+)
+
+print(response["successful"])  # True
+print(response["data"])        # {"id": 42, "url": "https://github.com/..."}
+```
+</CodeGroup>
+
+## ToolExecuteResponse structure
+
+Every `execute()` call returns the same shape regardless of the tool:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | `dict` | The tool's output payload. Structure varies per tool. |
+| `error` | `string \| null` | Error message if execution failed; `null` on success. |
+| `successful` | `boolean` | `true` if the tool executed without errors. |
+
+## Fetching raw schemas
+
+Use `getRawComposioTools()` (TypeScript) or `get_raw_composio_tools()` (Python) to retrieve the raw JSON schema for tools without wrapping them for a specific provider. This is useful for introspection, custom rendering, or building your own provider adapter.
+
+<CodeGroup>
+```typescript TypeScript
+// Fetch raw schemas for all GitHub tools
+const rawTools = await composio.tools.getRawComposioTools({
+  toolkits: ['github'],
+  limit: 5,
+});
+
+rawTools.forEach(tool => {
+  console.log(tool.slug, tool.description);
+});
+```
+
+```python Python
+# Fetch raw schemas for all GitHub tools
+raw_tools = composio.tools.get_raw_composio_tools(
+    toolkits=["github"],
+    limit=5,
+)
+
+for tool in raw_tools:
+    print(tool.slug, tool.description)
+```
+</CodeGroup>
+
+## Searching for tools
+
+Pass a `search` string instead of `toolkits` to find tools by keyword. This is useful when you want to discover tools dynamically without knowing the toolkit name upfront.
+
+<CodeGroup>
+```typescript TypeScript
+const tools = await composio.tools.get('user_123', {
+  search: 'create issue',
+  limit: 5,
+});
+```
+
+```python Python
+tools = composio.tools.get(
+    user_id="user_123",
+    search="create issue",
+    limit=5,
+)
+```
+</CodeGroup>
+
+<Warning>
+  Calling `composio.tools.get()` and `composio.tools.execute()` directly is considered the **legacy pattern** for most production applications. For multi-user apps, dynamic tool routing, and MCP support, use `composio.create()` sessions instead. Direct execution does not support the full session authorization flow.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Sessions Overview" icon="layer-group" href="/sessions/overview">
+    Learn how to create and manage sessions for multi-user applications.
+  </Card>
+  <Card title="Proxy Execution" icon="route" href="/guides/proxy-execute">
+    Make authenticated HTTP requests to any API endpoint through Composio.
+  </Card>
+</CardGroup>

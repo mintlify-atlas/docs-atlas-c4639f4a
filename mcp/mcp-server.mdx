@@ -1,0 +1,212 @@
+---
+title: 'Creating Persistent Composio MCP Servers'
+description: 'Create named MCP server configurations that generate per-user streaming endpoints on demand. Manage MCP servers with the Composio SDK or CLI.'
+---
+
+A **persistent MCP server** is a named configuration stored in Composio that specifies which toolkits and tools are available, and how user connections are managed. Once created, you call `.generate(user_id)` to receive a live, user-specific streaming endpoint URL — without creating a new session each time.
+
+## Session MCP vs. Persistent MCP
+
+| | Session MCP | Persistent MCP Server |
+|---|---|---|
+| **Lifetime** | Tied to the session object | Survives restarts; stored in Composio |
+| **Setup** | Zero — auto-generated | One-time `mcp.create()` call |
+| **Per-user URL** | One URL per session | `.generate(user_id)` on any server |
+| **Best for** | Notebooks, single-user scripts | SaaS products, team deployments, Cursor/Claude Desktop |
+
+## Creating an MCP Server
+
+<CodeGroup>
+```python Python
+from composio import Composio
+
+composio = Composio(api_key="your-api-key")
+
+# Create a server with simple toolkit names
+server = composio.mcp.create(
+    name="my-team-mcp",
+    toolkits=["github", "slack"],
+    allowed_tools=["GITHUB_CREATE_ISSUE", "GITHUB_LIST_REPOS", "SLACK_SEND_MESSAGE"],
+    manually_manage_connections=False,  # Composio manages OAuth connections
+)
+
+print(server.id)    # e.g. "mcp_abc123"
+print(server.name)  # "my-team-mcp"
+
+# Generate a live endpoint for a user
+mcp = server.generate("user-alice")
+print(mcp["url"])           # User-specific streaming HTTP URL
+print(mcp["allowed_tools"]) # Tools available to this user
+```
+
+```typescript TypeScript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const server = await composio.mcp.create({
+  name: 'my-team-mcp',
+  toolkits: ['github', 'slack'],
+  allowedTools: ['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS', 'SLACK_SEND_MESSAGE'],
+  manuallyManageConnections: false,
+});
+
+console.log(server.id);   // "mcp_abc123"
+
+// Generate a live endpoint for a specific user
+const mcp = await server.generate('user-alice');
+console.log(mcp.url);           // Streaming HTTP URL for Alice
+console.log(mcp.allowedTools);  // Tools available to Alice
+```
+</CodeGroup>
+
+### `create()` Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `str` | Unique human-readable name for the server configuration |
+| `toolkits` | `list[str \| ConfigToolkit]` | Toolkits to include. Pass strings for all tools, or `ConfigToolkit` dicts to pin auth configs |
+| `allowed_tools` | `list[str] \| None` | Explicit list of tool slugs to expose. `None` exposes all tools from the given toolkits |
+| `manually_manage_connections` | `bool` | If `True`, your app manages connected accounts; if `False` (default), Composio handles OAuth |
+
+## Listing Servers
+
+```python Python
+response = composio.mcp.list(
+    page_no=1,
+    limit=10,
+    toolkits="github",     # filter by toolkit name (single string)
+    name="team",           # partial name match
+    order_by="created_at",
+    order_direction="desc",
+)
+
+for item in response["items"]:
+    print(item["name"], "-", item["server_instance_count"], "active instances")
+```
+
+## Retrieving a Server
+
+```python Python
+server = composio.mcp.get("mcp_abc123")
+
+print(server.name)
+print(server.allowed_tools)
+print(server.toolkits)
+print(server.server_instance_count)
+```
+
+## Updating a Server
+
+<CodeGroup>
+```python Python
+# Update name only
+composio.mcp.update("mcp_abc123", name="my-team-mcp-v2")
+
+# Update toolkits and tools
+composio.mcp.update(
+    "mcp_abc123",
+    toolkits=["github", "slack", "linear"],
+    allowed_tools=["GITHUB_CREATE_ISSUE", "SLACK_SEND_MESSAGE", "LINEAR_CREATE_ISSUE"],
+)
+```
+
+```typescript TypeScript
+// Update name only
+await composio.mcp.update('mcp_abc123', { name: 'my-team-mcp-v2' });
+
+// Update toolkits and tools
+await composio.mcp.update('mcp_abc123', {
+  toolkits: ['github', 'slack', 'linear'],
+  allowedTools: ['GITHUB_CREATE_ISSUE', 'SLACK_SEND_MESSAGE', 'LINEAR_CREATE_ISSUE'],
+});
+```
+</CodeGroup>
+
+## Deleting a Server
+
+```python Python
+result = composio.mcp.delete("mcp_abc123")
+if result["deleted"]:
+    print(f"Server {result['id']} deleted successfully")
+```
+
+## Generating a Per-User Endpoint
+
+`.generate()` can be called on the response object returned by `create()`, or directly on `composio.mcp` if you already know the server ID:
+
+<CodeGroup>
+```python Python
+# Shortcut on the create() response
+mcp = server.generate("user-bob")
+
+# Or call composio.mcp.generate() directly with both IDs
+mcp = composio.mcp.generate(
+    user_id="user-bob",
+    mcp_config_id="mcp_abc123",
+)
+
+print(mcp["url"])         # Streaming HTTP URL scoped to user-bob
+print(mcp["type"])        # "streamable_http"
+print(mcp["user_id"])     # "user-bob"
+print(mcp["auth_configs"]) # List of auth config IDs linked to this server
+```
+
+```typescript TypeScript
+// Shortcut on the create() response
+const mcp = await server.generate('user-bob');
+
+// Direct call
+const mcp2 = await composio.mcp.generate('user-bob', 'mcp_abc123');
+
+console.log(mcp.url);         // Streaming HTTP URL
+console.log(mcp.type);        // "streamable_http"
+console.log(mcp.userId);      // "user-bob"
+```
+</CodeGroup>
+
+### `MCPServerInstance` Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `str` | MCP server configuration ID |
+| `name` | `str` | Human-readable server name |
+| `type` | `str` | Transport type — always `"streamable_http"` |
+| `url` | `str` | User-specific connection URL for MCP clients |
+| `user_id` | `str` | The user ID this instance was generated for |
+| `allowed_tools` | `list[str]` | Tool slugs available through this endpoint |
+| `auth_configs` | `list[str]` | Auth configuration IDs linked to this server |
+
+## Full Example: Multi-User Agent Server
+
+```python Python
+import os
+from fastapi import FastAPI, HTTPException
+from composio import Composio
+
+app = FastAPI()
+composio = Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+
+# One-time setup — create the MCP server configuration
+SERVER_ID = "mcp_abc123"  # store this after first create()
+
+@app.get("/mcp-endpoint/{user_id}")
+async def get_mcp_endpoint(user_id: str):
+    """Return a live MCP URL for the given user."""
+    try:
+        mcp = composio.mcp.generate(
+            user_id=user_id,
+            mcp_config_id=SERVER_ID,
+        )
+        return {
+            "url": mcp["url"],
+            "type": mcp["type"],
+            "tools": mcp["allowed_tools"],
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+```
+
+<Tip>
+  When integrating with **Cursor** or **Claude Desktop**, paste the generated `url` into the MCP server settings. If the server requires authorization headers, add them under the `headers` field in the client configuration file. Persistent MCP servers are ideal here because the URL structure is stable and you can regenerate user-specific endpoints without recreating the server.
+</Tip>

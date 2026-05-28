@@ -1,0 +1,167 @@
+---
+title: 'Sessions: Per-User Tool Routing in Composio'
+description: 'Composio sessions give each user an isolated runtime context with their own tools, connected accounts, and execution environment. Learn how to create and use sessions.'
+---
+
+A **session** is the central primitive in Composio's tool-routing model. Each session is scoped to a single `userId` and carries its own set of enabled toolkits, connected accounts, and an optional persistent execution sandbox (the Workbench). Your AI agent interacts with session tools using `session.tools()`, which returns provider-wrapped tool definitions ready to pass directly to any LLM framework.
+
+Sessions are server-side objects — they persist between requests. Once created, re-attach to the same session by calling `composio.use(sessionId)` instead of creating a new one.
+
+## Creating a Session
+
+Use `composio.create(userId, config)` to provision a new session. The returned object exposes the session's tools, MCP endpoint, and authorization helpers.
+
+<CodeGroup>
+```typescript TypeScript
+import { Composio } from '@composio/core';
+
+const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+
+const session = await composio.create('user_123', {
+  toolkits: ['github', 'slack'],
+  manageConnections: true,
+});
+
+console.log(session.sessionId);   // e.g. "ses_abc123"
+console.log(session.mcp.url);     // MCP endpoint for this session
+console.log(session.mcp.headers); // { 'x-api-key': '...' }
+```
+
+```python Python
+from composio import Composio
+
+composio = Composio(api_key="your-api-key")
+
+session = composio.tool_router.create(
+    user_id="user_123",
+    toolkits=["github", "slack"],
+    manage_connections=True,
+)
+
+print(session.session_id)     # e.g. "ses_abc123"
+print(session.mcp.url)        # MCP endpoint for this session
+print(session.mcp.headers)    # { 'x-api-key': '...' }
+```
+</CodeGroup>
+
+## Session Properties
+
+Every session object exposes the following properties after creation:
+
+| Property | Type | Description |
+|---|---|---|
+| `session.sessionId` / `session.session_id` | `string` | Unique identifier for the session. Persist this to re-attach later. |
+| `session.mcp.url` | `string` | HTTP/SSE MCP endpoint for this session. Use this with MCP-compatible clients. |
+| `session.mcp.headers` | `Record<string, string>` | Authentication headers (includes `x-api-key`) to pass with every MCP request. |
+| `session.mcp.type` | `"http"` \| `"sse"` | MCP transport type for this session. |
+| `session.experimental.files` | `FilesMount` | File-upload and download helpers scoped to this session's Workbench mount. |
+
+## Getting Tools for Your Agent
+
+Call `session.tools()` to retrieve the provider-formatted tool list. Pass the result directly to your LLM framework.
+
+<CodeGroup>
+```typescript TypeScript
+const tools = await session.tools();
+
+// OpenAI example
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Open a GitHub issue' }],
+  tools,
+});
+```
+
+```python Python
+tools = session.tools()
+
+# OpenAI example
+response = openai.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Open a GitHub issue"}],
+    tools=tools,
+)
+```
+</CodeGroup>
+
+## Initiating a Toolkit Connection
+
+Use `session.authorize(toolkit)` to start an OAuth or API-key connection flow for the session's user. The returned `ConnectionRequest` contains a `redirect_url` to send the user to.
+
+<CodeGroup>
+```typescript TypeScript
+const request = await session.authorize('github');
+console.log(request.redirectUrl); // Send this URL to the user
+```
+
+```python Python
+request = session.authorize("github")
+print(request.redirect_url)  # Send this URL to the user
+```
+</CodeGroup>
+
+## Meta Tools Injected by Composio
+
+When `manageConnections` / `manage_connections` is enabled (the default), Composio automatically injects a set of **meta tools** into `session.tools()`. These give the agent the ability to discover tools, manage connections, and execute code without you writing any extra logic.
+
+| Meta Tool | Purpose |
+|---|---|
+| `COMPOSIO_SEARCH_TOOLS` | Semantically search for tools by use-case description. |
+| `COMPOSIO_GET_TOOL_SCHEMAS` | Fetch full schemas for one or more tool slugs. |
+| `COMPOSIO_MANAGE_CONNECTIONS` | Guide the user through connecting a toolkit (OAuth / API key). |
+| `COMPOSIO_MULTI_EXECUTE_TOOL` | Execute multiple tools in a single round-trip. |
+| `COMPOSIO_REMOTE_WORKBENCH` | Run Python code in the session's persistent sandbox. |
+| `COMPOSIO_REMOTE_BASH_TOOL` | Execute shell commands in the session's sandbox. |
+
+<Note>
+`COMPOSIO_REMOTE_WORKBENCH` and `COMPOSIO_REMOTE_BASH_TOOL` are only available when the Workbench is enabled for the session. See the [Workbench guide](/sessions/workbench) for details.
+</Note>
+
+## Re-attaching to an Existing Session
+
+Sessions are persistent — you don't need to create a new one for every request. Store the `sessionId` after creation and call `composio.use(sessionId)` to re-attach.
+
+<CodeGroup>
+```typescript TypeScript
+// First request — create and persist the session ID
+const session = await composio.create('user_123', { toolkits: ['github'] });
+await db.saveSessionId(session.sessionId);
+
+// Later requests — re-attach
+const sessionId = await db.getSessionId('user_123');
+const session = await composio.use(sessionId);
+const tools = await session.tools();
+```
+
+```python Python
+# First request — create and persist the session ID
+session = composio.tool_router.create(user_id="user_123", toolkits=["github"])
+db.save_session_id(session.session_id)
+
+# Later requests — re-attach
+session_id = db.get_session_id("user_123")
+session = composio.tool_router.use(session_id)
+tools = session.tools()
+```
+</CodeGroup>
+
+<Note>
+Sessions persist on Composio's servers. Re-attaching with `composio.use()` does **not** create a new session — it returns a handle to the existing one, preserving connected accounts and Workbench state.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuring Sessions" icon="sliders" href="/sessions/configuring-sessions">
+    Control which toolkits, tools, and tags are available in a session.
+  </Card>
+  <Card title="Tools and Toolkits" icon="wrench" href="/sessions/tools-and-toolkits">
+    Fetch, search, and filter tools outside of a session context.
+  </Card>
+  <Card title="Tool Modifiers" icon="code" href="/sessions/modifiers">
+    Transform tool schemas, inputs, and outputs with middleware hooks.
+  </Card>
+  <Card title="Workbench" icon="terminal" href="/sessions/workbench">
+    Run code and manage files in a persistent sandbox scoped to the session.
+  </Card>
+</CardGroup>
